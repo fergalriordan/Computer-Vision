@@ -83,8 +83,8 @@ const string GROUND_TRUTH_FOR_BOARD_IMAGES[][3] = {
 	{"DraughtsGame1Move62.JPG", "4,9", "K2,11,19,20,25"},
 	{"DraughtsGame1Move63.JPG", "4,14", "K2,11,19,20,25"},
 	{"DraughtsGame1Move64.JPG", "4", "K2,11,15,19,20"},
-	{"DraughtsGame1Move65.JPG", "8", "K2,11,15,19,20,29"},
-	{"DraughtsGame1Move66.JPG", "", "K2,K4,15,19,20,29"}
+	{"DraughtsGame1Move65.JPG", "8", "K2,11,15,19,20"},
+	{"DraughtsGame1Move66.JPG", "", "K2,K4,15,19,20"}
 };
 
 // Data provided:  Approx. frame number, From square number, To square number
@@ -541,7 +541,6 @@ void Part2(DraughtsBoard board, string (&predictions)[32]) {
 
 	Mat perspective_matrix(3, 3, CV_32FC1), perspective_warped_image, perspective_warped_part1;
 	perspective_warped_image = Mat::zeros(400, 400, board.mOriginalImage.type());
-	//perspective_warped_part1 = Mat::zeros(400, 400, part1.type());
 
 	Point2f source_points[4], destination_points[4];
 	source_points[0] = Point2f(114.0, 17.0);
@@ -556,7 +555,6 @@ void Part2(DraughtsBoard board, string (&predictions)[32]) {
 
 	perspective_matrix = getPerspectiveTransform(source_points, destination_points);
 	warpPerspective(board.mOriginalImage, perspective_warped_image, perspective_matrix, perspective_warped_image.size());
-	//warpPerspective(part1, perspective_warped_part1, perspective_matrix, perspective_warped_image.size());
 	
 	Mat perspective_transform_output = JoinImagesHorizontally(perspective_warped_image, "", perspective_warped_part1, "");
 	//imshow("Perspective Transformation", perspective_transform_output);
@@ -605,9 +603,6 @@ void Part2(DraughtsBoard board, string (&predictions)[32]) {
 	double white_scores[32];
 	double black_scores[32];
 
-	//string white_pieces = "";
-	//string black_pieces = "";
-
 	for (int i = 0; i < result_blocks.size(); i++) {
 		cvtColor(result_blocks[i], hls_unclassified_square, COLOR_BGR2HLS);
 		ColourHistogram reference_histogram(hls_unclassified_square, 4);
@@ -633,51 +628,25 @@ void Part2(DraughtsBoard board, string (&predictions)[32]) {
 			}
 		}
 		else
-			predictions[i] = to_string(0); // default to an empty square if not confident enough of a piece being present 
-
-		// NOTE: THE ABOVE METHOD IS STUPID AND SHOULD BE IMPROVED EVENTUALLY
-
-		/*if (status[i] == 1) {
-			if (white_pieces == "") {
-				white_pieces = white_pieces + to_string(i + 1);
-			}
-			else white_pieces = white_pieces + "," + to_string(i + 1);
-		}
-		else if (status[i] == 2) {
-			if (black_pieces == "") {
-				black_pieces = black_pieces + to_string(i + 1);
-			}
-			else black_pieces = black_pieces + "," + to_string(i + 1);
-		}
-
-		//std::cout << i + 1 << endl;
-		//std::cout << "Empty Score: " << empty_scores[i] << endl;
-		//std::cout << "White Score: " << white_scores[i] << endl;
-		//std::cout << "Black Score: " << black_scores[i] << endl;
-		*/
+			predictions[i] = to_string(0); // default to an empty square if not confident enough of a piece being present (THIS IS PROBABLY STUPID)
 	}
-
-	/*std::cout << "\nWhite Pieces:	           " << white_pieces << endl;
-	std::cout << "White Pieces Ground Truth: " << GROUND_TRUTH_FOR_BOARD_IMAGES[0][1] << endl;
-	std::cout << "\nBlack Pieces:		   " << black_pieces << endl;
-	std::cout << "Black Pieces Ground Truth: " << GROUND_TRUTH_FOR_BOARD_IMAGES[0][2] << endl;
-	*/
 }
 
 void board_representation_from_strings_to_array(string whites, string blacks, string (&positions)[32]) {
 	vector<string> white_positions;
+	vector<string> white_king_positions;
 	vector<string> black_positions;
+	vector<string> black_king_positions;
 
-	int whites_buffer[12];
-	int blacks_buffer[12];
-	//int whites_buffer[2][12];
-	//int blacks_buffer[2][12];
+	// i need to store the king prefixes and piece positions separately as I am using the positions as integers to index into a length-32 board array
+	// the board array makes computation of the confusion matrix trivial, therefore the awkwardness in this section makes sense (? maybe)
+
+	int whites_buffer[12]; // these are the buffers that store the string-to-integer-converted piece positions
+	int blacks_buffer[12]; // once the pieces are positioned in the 32-string array, I will add the king prefixes back in the correct places
 
 	for (int i = 0; i < 12; i++) {
 		whites_buffer[i] = -1;
 		blacks_buffer[i] = -1; // initialise the two buffers to a value that doesn't represent any of the three possible states
-		//whites_buffer[1][i] = 0; 
-		//blacks_buffer[1][i] = 0; // set king status to 0
 	}
 
 	stringstream sw(whites);
@@ -687,12 +656,13 @@ void board_representation_from_strings_to_array(string whites, string blacks, st
 		string next_white;
 		getline(sw, next_white, ',');
 		string prefix = next_white.substr(0, 1);
-		if (prefix != "K" && !next_white.empty()) {
-			white_positions.push_back(next_white);
+		if (prefix != "K" && !next_white.empty()) { 
+			white_positions.push_back(next_white); // if it is just a white man, simply push to the white position vector
 		}
-		else if (!next_white.empty()){
+		else if (!next_white.empty()){ // if a king is detected, subtract the king prefix and then push to the white position vector - the king position can then be sto
 			string white_king_position = next_white.substr(1); // record the remainder of the string that follows the K
 			white_positions.push_back(white_king_position);
+			white_king_positions.push_back(white_king_position);
 		}
 
 	}
@@ -707,6 +677,7 @@ void board_representation_from_strings_to_array(string whites, string blacks, st
 		else if (!next_black.empty()) {
 			string black_king_position = next_black.substr(1); // record the position of the king
 			black_positions.push_back(black_king_position); // and store it
+			black_king_positions.push_back(black_king_position);
 		}
 	}
 
@@ -797,6 +768,21 @@ void MyApplication()
 		Part1(sample_board);
 
 		// ********************************************** PART 2 *******************************************************
+		// the solution for part 2:
+		//		- performs a perspective transform on the original image for each of the 67 still frames
+		//		- divides this transformed image into 64 individual squares 
+		//		- performs a histogram comparison on the 32 black squares, comparing against samples that i created
+		//			(the samples used are the result of the above operations on frame 21: probably not an optimal strategy, i may return to improve this if i have time)
+		//			(one possible alternative would be to use the original back projection samples found in the Media folder and compare hists with a circular region at the centre of each sauare)
+		//		- after the histogram comparison, the function returns an array representing the state of each of the 32 black squares
+		//		- the ground truth provided for this assignment is converted to a 2D array, so the correct row can then be compared against the 32 bit array produced by processing the still image
+		//		- this comparison yields values for true positives, false positives etc, which are added to the values stored in a confusion matrix struct
+		//		- after the 67 images have been processed, the confusion matrix is printed
+		//
+		//	current issues with the solution:
+		//		- histogram comparison technique seems vulnerable to failure, though performance is surprisingly good
+		//		- no distinction made at present between men and kings
+		//		- ground truth conversion is extremely convoluted
 
 		// initialise a confusion matrix struct to record the confusion matrix data associated with the 67 move predictions
 		ConfusionMatrix conf;
@@ -831,21 +817,8 @@ void MyApplication()
 			for (int j = 0; j < 32; j++) {
 				predictions[j] = -1; // start with invalid predictions
 			}
-			Part2(current_board, predictions);
 
-			cout << endl;
-			cout << right << setw(15) << "MOVE " << i << endl << endl;
-
-			cout << setw(15) << "GROUND TRUTH: ";
-			for (int j = 0; j < 32; j++) {
-				cout << setw(3) << BOARD_TRUTH[i][j];
-			}
-			cout << endl;
-			cout << setw(15) << "PREDICTIONS: ";
-			for (int j = 0; j < 32; j++) {
-				cout << setw(3) << predictions[j];
-			}
-			cout << endl << endl;
+			Part2(current_board, predictions); // IMAGE PROCESSING OCCURS HERE
 
 			// compare the predicted value of each square against the ground truth and update the confusion matrix
 			for (int j = 0; j < 32; j++) {
@@ -877,10 +850,9 @@ void MyApplication()
 					conf.pred_black_truth_black++;
 				}
 			}
-			//display_matrix(conf); // print out the confusion matrix
 		}
 
-		display_matrix(conf);
+		display_matrix(conf); // display the confusion matrix
 
 		// ********************************************** PART 3 *******************************************************
 
