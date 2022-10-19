@@ -1,5 +1,4 @@
 #include "Utilities.h"
-//#include "Histograms.cpp"
 #include <iostream>
 #include <iomanip>
 #include <fstream>
@@ -18,14 +17,6 @@ using namespace std;
 
 // Data provided:  Filename, White pieces, Black pieces
 // Note that this information can ONLY be used to evaluate performance.  It must not be used during processing of the images.
-/*const int GROUND_TRUTH_FOR_BOARD_IMAGES_IN_ARRAY_FORM[67][32] = {
-	// 1  2  3  4  5  6  7  8  9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31 32
-	  {1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2},
-	  {1, 1, 1, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2},
-	  {1, 1, 1, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 2, 2, 2, 2, 0, 2, 2, 2, 2, 2, 2, 2, 2},
-	  {1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 2, 2, 2, 2, 0, 2, 2, 2, 2, 2, 2, 2, 2}
-};*/
-
 const string GROUND_TRUTH_FOR_BOARD_IMAGES[][3] = {
 	{"DraughtsGame1Move0.JPG", "1,2,3,4,5,6,7,8,9,10,11,12", "21,22,23,24,25,26,27,28,29,30,31,32"},
 	{"DraughtsGame1Move1.JPG", "1,2,3,4,5,6,7,8,10,11,12,13", "21,22,23,24,25,26,27,28,29,30,31,32"},
@@ -546,7 +537,7 @@ void Part1(DraughtsBoard board) {
 }
 
 
-void Part2(DraughtsBoard board, int (&predictions)[32]) {
+void Part2(DraughtsBoard board, string (&predictions)[32]) {
 
 	Mat perspective_matrix(3, 3, CV_32FC1), perspective_warped_image, perspective_warped_part1;
 	perspective_warped_image = Mat::zeros(400, 400, board.mOriginalImage.type());
@@ -628,21 +619,21 @@ void Part2(DraughtsBoard board, int (&predictions)[32]) {
 		if (abs(empty_scores[i] - white_scores[i]) > 0.2 || abs(empty_scores[i] - black_scores[i]) > 0.2 || abs(black_scores[i] - white_scores[i]) > 0.2) {
 			if (empty_scores[i] > white_scores[i]) {
 				if (empty_scores[i] > black_scores[i]) {
-					predictions[i] = 0; // represent empty square with 0
+					predictions[i] = to_string(0); // represent empty square with 0
 				}
 				else {
-					predictions[i] = 2; // represent black piece with 2
+					predictions[i] = to_string(2); // represent black piece with 2
 				}
 			}
 			else if (white_scores[i] > black_scores[i]) {
-				predictions[i] = 1; // represent white piece with 1
+				predictions[i] = to_string(1); // represent white piece with 1
 			}
 			else {
-				predictions[i] = 2;
+				predictions[i] = to_string(2);
 			}
 		}
 		else
-			predictions[i] = 0; // default to an empty square if not confident enough of a piece being present 
+			predictions[i] = to_string(0); // default to an empty square if not confident enough of a piece being present 
 
 		// NOTE: THE ABOVE METHOD IS STUPID AND SHOULD BE IMPROVED EVENTUALLY
 
@@ -673,16 +664,20 @@ void Part2(DraughtsBoard board, int (&predictions)[32]) {
 	*/
 }
 
-void board_representation_from_strings_to_array(string whites, string blacks, int (&positions)[32]) {
+void board_representation_from_strings_to_array(string whites, string blacks, string (&positions)[32]) {
 	vector<string> white_positions;
 	vector<string> black_positions;
 
 	int whites_buffer[12];
 	int blacks_buffer[12];
+	//int whites_buffer[2][12];
+	//int blacks_buffer[2][12];
 
 	for (int i = 0; i < 12; i++) {
 		whites_buffer[i] = -1;
 		blacks_buffer[i] = -1; // initialise the two buffers to a value that doesn't represent any of the three possible states
+		//whites_buffer[1][i] = 0; 
+		//blacks_buffer[1][i] = 0; // set king status to 0
 	}
 
 	stringstream sw(whites);
@@ -691,13 +686,28 @@ void board_representation_from_strings_to_array(string whites, string blacks, in
 	while (sw.good()) {
 		string next_white;
 		getline(sw, next_white, ',');
-		white_positions.push_back(next_white);
+		string prefix = next_white.substr(0, 1);
+		if (prefix != "K" && !next_white.empty()) {
+			white_positions.push_back(next_white);
+		}
+		else if (!next_white.empty()){
+			string white_king_position = next_white.substr(1); // record the remainder of the string that follows the K
+			white_positions.push_back(white_king_position);
+		}
+
 	}
 
 	while (sb.good()) {
 		string next_black;
 		getline(sb, next_black, ',');
-		black_positions.push_back(next_black);
+		string prefix = next_black.substr(0, 1);
+		if (prefix != "K" && !next_black.empty()) {
+			black_positions.push_back(next_black);
+		}
+		else if (!next_black.empty()) {
+			string black_king_position = next_black.substr(1); // record the position of the king
+			black_positions.push_back(black_king_position); // and store it
+		}
 	}
 
 	for (int i = 0; i < white_positions.size(); i++) {
@@ -713,10 +723,10 @@ void board_representation_from_strings_to_array(string whites, string blacks, in
 	for (int i = 0; i < 32; i++) {
 		for (int j = 0; j < 12; j++) {
 			if (i == whites_buffer[j]) {
-				positions[i] = 1;
+				positions[i] = "1";
 			}
 			else if (i == blacks_buffer[j]) {
-				positions[i] = 2;
+				positions[i] = "2";
 			}
 		}
 	}
@@ -801,22 +811,22 @@ void MyApplication()
 		conf.pred_black_truth_black = 0;
 
 		// convert the provided ground truth data to a two-dimensional array for convenience
-		int BOARD_TRUTH[67][32];
-		int buffer[32];
+		string BOARD_TRUTH[67][32];
+		string buffer[32];
 		for (int i = 0; i < 32; i++) {
-			buffer[i] = 0; // start with an empty buffer
+			buffer[i] = "0"; // start with an empty buffer
 		}
-		for (int i = 0; i < 20; i++) {
+		for (int i = 0; i < 67; i++) {
 			board_representation_from_strings_to_array(GROUND_TRUTH_FOR_BOARD_IMAGES[i][1], GROUND_TRUTH_FOR_BOARD_IMAGES[i][2], buffer);
 			for (int j = 0; j < 32; j++) {
 				BOARD_TRUTH[i][j] = buffer[j];
-				buffer[j] = 0; // reset the buffer to all 0s for the next iteration
+				buffer[j] = "0"; // reset the buffer to all 0s for the next iteration
 			}
 		}
 
 		// process each of the 67 moves one by one and compare the resulting predictions array against the correct row of the 2D ground truth array 
-		int predictions[32];
-		for (int i = 0; i < 20; i++) {
+		string predictions[32];
+		for (int i = 0; i < 67; i++) {
 			DraughtsBoard current_board(GROUND_TRUTH_FOR_BOARD_IMAGES[i][0], GROUND_TRUTH_FOR_BOARD_IMAGES[i][1], GROUND_TRUTH_FOR_BOARD_IMAGES[i][2]);
 			for (int j = 0; j < 32; j++) {
 				predictions[j] = -1; // start with invalid predictions
@@ -825,10 +835,13 @@ void MyApplication()
 
 			cout << endl;
 			cout << right << setw(15) << "MOVE " << i << endl << endl;
+
+			cout << setw(15) << "GROUND TRUTH: ";
 			for (int j = 0; j < 32; j++) {
 				cout << setw(3) << BOARD_TRUTH[i][j];
 			}
 			cout << endl;
+			cout << setw(15) << "PREDICTIONS: ";
 			for (int j = 0; j < 32; j++) {
 				cout << setw(3) << predictions[j];
 			}
@@ -836,38 +849,38 @@ void MyApplication()
 
 			// compare the predicted value of each square against the ground truth and update the confusion matrix
 			for (int j = 0; j < 32; j++) {
-				if (predictions[j] == 0 && BOARD_TRUTH[i][j] == 0) {
+				if (predictions[j] == "0" && BOARD_TRUTH[i][j] == "0") {
 					conf.pred_empt_truth_empt++;
 				}
-				else if (predictions[j] == 0 && BOARD_TRUTH[i][j] == 1) {
+				else if (predictions[j] == "0" && BOARD_TRUTH[i][j] == "1") {
 					conf.pred_empt_truth_white++;
 				}
-				else if (predictions[j] == 0 && BOARD_TRUTH[i][j] == 2) {
+				else if (predictions[j] == "0" && BOARD_TRUTH[i][j] == "2") {
 					conf.pred_empt_truth_black++;
 				}
-				else if (predictions[j] == 1 && BOARD_TRUTH[i][j] == 0) {
+				else if (predictions[j] == "1" && BOARD_TRUTH[i][j] == "0") {
 					conf.pred_white_truth_empt++;
 				}
-				else if (predictions[j] == 1 && BOARD_TRUTH[i][j] == 1) {
+				else if (predictions[j] == "1" && BOARD_TRUTH[i][j] == "1") {
 					conf.pred_white_truth_white++;
 				}
-				else if (predictions[j] == 1 && BOARD_TRUTH[i][j] == 2) {
+				else if (predictions[j] == "1" && BOARD_TRUTH[i][j] == "2") {
 					conf.pred_white_truth_black++;
 				}
-				else if (predictions[j] == 2 && BOARD_TRUTH[i][j] == 0) {
+				else if (predictions[j] == "2" && BOARD_TRUTH[i][j] == "0") {
 					conf.pred_black_truth_empt++;
 				}
-				else if (predictions[j] == 2 && BOARD_TRUTH[i][j] == 1) {
+				else if (predictions[j] == "2" && BOARD_TRUTH[i][j] == "1") {
 					conf.pred_black_truth_white++;
 				}
-				else if (predictions[j] == 2 && BOARD_TRUTH[i][j] == 2) {
+				else if (predictions[j] == "2" && BOARD_TRUTH[i][j] == "2") {
 					conf.pred_black_truth_black++;
 				}
 			}
-			display_matrix(conf); // print out the confusion matrix
+			//display_matrix(conf); // print out the confusion matrix
 		}
 
-		//display_matrix(conf);
+		display_matrix(conf);
 
 		// ********************************************** PART 3 *******************************************************
 
