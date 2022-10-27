@@ -15,6 +15,171 @@ using namespace std;
 using namespace cv;
 using namespace std;
 
+// histogram classes taken from "Histograms.cpp" for histogram back-projection
+class Histogram
+{
+protected:
+	Mat mImage;
+	int mNumberChannels;
+	int* mChannelNumbers;
+	int* mNumberBins;
+	float mChannelRange[2];
+public:
+	Histogram(Mat image, int number_of_bins)
+	{
+		mImage = image;
+		mNumberChannels = mImage.channels();
+		mChannelNumbers = new int[mNumberChannels];
+		mNumberBins = new int[mNumberChannels];
+		mChannelRange[0] = 0.0;
+		mChannelRange[1] = 255.0;
+		for (int count = 0; count < mNumberChannels; count++)
+		{
+			mChannelNumbers[count] = count;
+			mNumberBins[count] = number_of_bins;
+		}
+		//ComputeHistogram();
+	}
+	virtual void ComputeHistogram() = 0;
+	virtual void NormaliseHistogram() = 0;
+	static void Draw1DHistogram(MatND histograms[], int number_of_histograms, Mat& display_image)
+	{
+		int number_of_bins = histograms[0].size[0];
+		double max_value = 0, min_value = 0;
+		double channel_max_value = 0, channel_min_value = 0;
+		for (int channel = 0; (channel < number_of_histograms); channel++)
+		{
+			minMaxLoc(histograms[channel], &channel_min_value, &channel_max_value, 0, 0);
+			max_value = ((max_value > channel_max_value) && (channel > 0)) ? max_value : channel_max_value;
+			min_value = ((min_value < channel_min_value) && (channel > 0)) ? min_value : channel_min_value;
+		}
+		float scaling_factor = ((float)256.0) / ((float)number_of_bins);
+
+		Mat histogram_image((int)(((float)number_of_bins) * scaling_factor) + 1, (int)(((float)number_of_bins) * scaling_factor) + 1, CV_8UC3, Scalar(255, 255, 255));
+		display_image = histogram_image;
+		line(histogram_image, Point(0, 0), Point(0, histogram_image.rows - 1), Scalar(0, 0, 0));
+		line(histogram_image, Point(histogram_image.cols - 1, histogram_image.rows - 1), Point(0, histogram_image.rows - 1), Scalar(0, 0, 0));
+		int highest_point = static_cast<int>(0.9 * ((float)number_of_bins) * scaling_factor);
+		for (int channel = 0; (channel < number_of_histograms); channel++)
+		{
+			int last_height;
+			for (int h = 0; h < number_of_bins; h++)
+			{
+				float value = histograms[channel].at<float>(h);
+				int height = static_cast<int>(value * highest_point / max_value);
+				int where = (int)(((float)h) * scaling_factor);
+				if (h > 0)
+					line(histogram_image, Point((int)(((float)(h - 1)) * scaling_factor) + 1, (int)(((float)number_of_bins) * scaling_factor) - last_height),
+						Point((int)(((float)h) * scaling_factor) + 1, (int)(((float)number_of_bins) * scaling_factor) - height),
+						Scalar(channel == 0 ? 255 : 0, channel == 1 ? 255 : 0, channel == 2 ? 255 : 0));
+				last_height = height;
+			}
+		}
+	}
+};
+class OneDHistogram : public Histogram
+{
+private:
+	MatND mHistogram[3];
+public:
+	OneDHistogram(Mat image, int number_of_bins) :
+		Histogram(image, number_of_bins)
+	{
+		ComputeHistogram();
+	}
+	void ComputeHistogram()
+	{
+		vector<Mat> image_planes(mNumberChannels);
+		split(mImage, image_planes);
+		for (int channel = 0; (channel < mNumberChannels); channel++)
+		{
+			const float* channel_ranges = mChannelRange;
+			int* mch = { 0 };
+			calcHist(&(image_planes[channel]), 1, mChannelNumbers, Mat(), mHistogram[channel], 1, mNumberBins, &channel_ranges);
+		}
+	}
+	void SmoothHistogram()
+	{
+		for (int channel = 0; (channel < mNumberChannels); channel++)
+		{
+			MatND temp_histogram = mHistogram[channel].clone();
+			for (int i = 1; i < mHistogram[channel].rows - 1; ++i)
+			{
+				mHistogram[channel].at<float>(i) = (temp_histogram.at<float>(i - 1) + temp_histogram.at<float>(i) + temp_histogram.at<float>(i + 1)) / 3;
+			}
+		}
+	}
+	MatND getHistogram(int index)
+	{
+		return mHistogram[index];
+	}
+	void NormaliseHistogram()
+	{
+		for (int channel = 0; (channel < mNumberChannels); channel++)
+		{
+			normalize(mHistogram[channel], mHistogram[channel], 1.0);
+		}
+	}
+	Mat BackProject(Mat& image)
+	{
+		Mat& result = image.clone();
+		if (mNumberChannels == 1)
+		{
+			const float* channel_ranges[] = { mChannelRange, mChannelRange, mChannelRange };
+			for (int channel = 0; (channel < mNumberChannels); channel++)
+			{
+				calcBackProject(&image, 1, mChannelNumbers, *mHistogram, result, channel_ranges, 255.0);
+			}
+		}
+		else
+		{
+		}
+		return result;
+	}
+	void Draw(Mat& display_image)
+	{
+		Draw1DHistogram(mHistogram, mNumberChannels, display_image);
+	}
+};
+class ColourHistogram : public Histogram
+{
+private:
+	MatND mHistogram;
+public:
+	ColourHistogram(Mat all_images[], int number_of_images, int number_of_bins) :
+		Histogram(all_images[0], number_of_bins)
+	{
+		const float* channel_ranges[] = { mChannelRange, mChannelRange, mChannelRange };
+		for (int index = 0; index < number_of_images; index++)
+			calcHist(&mImage, 1, mChannelNumbers, Mat(), mHistogram, mNumberChannels, mNumberBins, channel_ranges, true, true);
+	}
+	ColourHistogram(Mat image, int number_of_bins) :
+		Histogram(image, number_of_bins)
+	{
+		ComputeHistogram();
+	}
+	void ComputeHistogram()
+	{
+		const float* channel_ranges[] = { mChannelRange, mChannelRange, mChannelRange };
+		calcHist(&mImage, 1, mChannelNumbers, Mat(), mHistogram, mNumberChannels, mNumberBins, channel_ranges);
+	}
+	void NormaliseHistogram()
+	{
+		normalize(mHistogram, mHistogram, 1.0);
+	}
+	Mat BackProject(Mat& image)
+	{
+		Mat& result = image.clone();
+		const float* channel_ranges[] = { mChannelRange, mChannelRange, mChannelRange };
+		calcBackProject(&image, 1, mChannelNumbers, mHistogram, result, channel_ranges, 255.0);
+		return result;
+	}
+	MatND getHistogram()
+	{
+		return mHistogram;
+	}
+};
+
 // Data provided:  Filename, White pieces, Black pieces
 // Note that this information can ONLY be used to evaluate performance.  It must not be used during processing of the images.
 const string GROUND_TRUTH_FOR_BOARD_IMAGES[][3] = {
@@ -173,184 +338,15 @@ const int GROUND_TRUTH_FOR_DRAUGHTSGAME1_VIDEO_MOVES[][3] = {
 #define NUMBER_OF_SQUARES_ON_EACH_SIDE 8
 #define NUMBER_OF_SQUARES (NUMBER_OF_SQUARES_ON_EACH_SIDE*NUMBER_OF_SQUARES_ON_EACH_SIDE/2)
 
-// histogram classes taken from "Histograms.cpp" for histogram back-projection
-
-class Histogram
-{
-protected:
-	Mat mImage;
-	int mNumberChannels;
-	int* mChannelNumbers;
-	int* mNumberBins;
-	float mChannelRange[2];
-public:
-	Histogram(Mat image, int number_of_bins)
-	{
-		mImage = image;
-		mNumberChannels = mImage.channels();
-		mChannelNumbers = new int[mNumberChannels];
-		mNumberBins = new int[mNumberChannels];
-		mChannelRange[0] = 0.0;
-		mChannelRange[1] = 255.0;
-		for (int count = 0; count < mNumberChannels; count++)
-		{
-			mChannelNumbers[count] = count;
-			mNumberBins[count] = number_of_bins;
-		}
-		//ComputeHistogram();
-	}
-	virtual void ComputeHistogram() = 0;
-	virtual void NormaliseHistogram() = 0;
-	static void Draw1DHistogram(MatND histograms[], int number_of_histograms, Mat& display_image)
-	{
-		int number_of_bins = histograms[0].size[0];
-		double max_value = 0, min_value = 0;
-		double channel_max_value = 0, channel_min_value = 0;
-		for (int channel = 0; (channel < number_of_histograms); channel++)
-		{
-			minMaxLoc(histograms[channel], &channel_min_value, &channel_max_value, 0, 0);
-			max_value = ((max_value > channel_max_value) && (channel > 0)) ? max_value : channel_max_value;
-			min_value = ((min_value < channel_min_value) && (channel > 0)) ? min_value : channel_min_value;
-		}
-		float scaling_factor = ((float)256.0) / ((float)number_of_bins);
-
-		Mat histogram_image((int)(((float)number_of_bins) * scaling_factor) + 1, (int)(((float)number_of_bins) * scaling_factor) + 1, CV_8UC3, Scalar(255, 255, 255));
-		display_image = histogram_image;
-		line(histogram_image, Point(0, 0), Point(0, histogram_image.rows - 1), Scalar(0, 0, 0));
-		line(histogram_image, Point(histogram_image.cols - 1, histogram_image.rows - 1), Point(0, histogram_image.rows - 1), Scalar(0, 0, 0));
-		int highest_point = static_cast<int>(0.9 * ((float)number_of_bins) * scaling_factor);
-		for (int channel = 0; (channel < number_of_histograms); channel++)
-		{
-			int last_height;
-			for (int h = 0; h < number_of_bins; h++)
-			{
-				float value = histograms[channel].at<float>(h);
-				int height = static_cast<int>(value * highest_point / max_value);
-				int where = (int)(((float)h) * scaling_factor);
-				if (h > 0)
-					line(histogram_image, Point((int)(((float)(h - 1)) * scaling_factor) + 1, (int)(((float)number_of_bins) * scaling_factor) - last_height),
-						Point((int)(((float)h) * scaling_factor) + 1, (int)(((float)number_of_bins) * scaling_factor) - height),
-						Scalar(channel == 0 ? 255 : 0, channel == 1 ? 255 : 0, channel == 2 ? 255 : 0));
-				last_height = height;
-			}
-		}
-	}
-};
-class OneDHistogram : public Histogram
-{
-private:
-	MatND mHistogram[3];
-public:
-	OneDHistogram(Mat image, int number_of_bins) :
-		Histogram(image, number_of_bins)
-	{
-		ComputeHistogram();
-	}
-	void ComputeHistogram()
-	{
-		vector<Mat> image_planes(mNumberChannels);
-		split(mImage, image_planes);
-		for (int channel = 0; (channel < mNumberChannels); channel++)
-		{
-			const float* channel_ranges = mChannelRange;
-			int* mch = { 0 };
-			calcHist(&(image_planes[channel]), 1, mChannelNumbers, Mat(), mHistogram[channel], 1, mNumberBins, &channel_ranges);
-		}
-	}
-	void SmoothHistogram()
-	{
-		for (int channel = 0; (channel < mNumberChannels); channel++)
-		{
-			MatND temp_histogram = mHistogram[channel].clone();
-			for (int i = 1; i < mHistogram[channel].rows - 1; ++i)
-			{
-				mHistogram[channel].at<float>(i) = (temp_histogram.at<float>(i - 1) + temp_histogram.at<float>(i) + temp_histogram.at<float>(i + 1)) / 3;
-			}
-		}
-	}
-	MatND getHistogram(int index)
-	{
-		return mHistogram[index];
-	}
-	void NormaliseHistogram()
-	{
-		for (int channel = 0; (channel < mNumberChannels); channel++)
-		{
-			normalize(mHistogram[channel], mHistogram[channel], 1.0);
-		}
-	}
-	Mat BackProject(Mat& image)
-	{
-		Mat& result = image.clone();
-		if (mNumberChannels == 1)
-		{
-			const float* channel_ranges[] = { mChannelRange, mChannelRange, mChannelRange };
-			for (int channel = 0; (channel < mNumberChannels); channel++)
-			{
-				calcBackProject(&image, 1, mChannelNumbers, *mHistogram, result, channel_ranges, 255.0);
-			}
-		}
-		else
-		{
-		}
-		return result;
-	}
-	void Draw(Mat& display_image)
-	{
-		Draw1DHistogram(mHistogram, mNumberChannels, display_image);
-	}
-};
-
-class ColourHistogram : public Histogram
-{
-private:
-	MatND mHistogram;
-public:
-	ColourHistogram(Mat all_images[], int number_of_images, int number_of_bins) :
-		Histogram(all_images[0], number_of_bins)
-	{
-		const float* channel_ranges[] = { mChannelRange, mChannelRange, mChannelRange };
-		for (int index = 0; index < number_of_images; index++)
-			calcHist(&mImage, 1, mChannelNumbers, Mat(), mHistogram, mNumberChannels, mNumberBins, channel_ranges, true, true);
-	}
-	ColourHistogram(Mat image, int number_of_bins) :
-		Histogram(image, number_of_bins)
-	{
-		ComputeHistogram();
-	}
-	void ComputeHistogram()
-	{
-		const float* channel_ranges[] = { mChannelRange, mChannelRange, mChannelRange };
-		calcHist(&mImage, 1, mChannelNumbers, Mat(), mHistogram, mNumberChannels, mNumberBins, channel_ranges);
-	}
-	void NormaliseHistogram()
-	{
-		normalize(mHistogram, mHistogram, 1.0);
-	}
-	Mat BackProject(Mat& image)
-	{
-		Mat& result = image.clone();
-		const float* channel_ranges[] = { mChannelRange, mChannelRange, mChannelRange };
-		calcBackProject(&image, 1, mChannelNumbers, mHistogram, result, channel_ranges, 255.0);
-		return result;
-	}
-	MatND getHistogram()
-	{
-		return mHistogram;
-	}
-};
-
-
 class DraughtsBoard
 {
 private:
 	int mBoardGroundTruth[NUMBER_OF_SQUARES];
-	//Mat mOriginalImage;
+	Mat mOriginalImage;
 
 	void loadGroundTruth(string pieces, int man_type, int king_type);
 
 public:
-	Mat mOriginalImage;
 	DraughtsBoard(string filename, string white_pieces_ground_truth, string black_pieces_ground_truth);
 };
 
@@ -375,8 +371,6 @@ DraughtsBoard::DraughtsBoard(string filename, string white_pieces_ground_truth, 
 	}
 }
 
-
-
 void DraughtsBoard::loadGroundTruth(string pieces, int man_type, int king_type)
 {
 	int index = 0;
@@ -400,6 +394,9 @@ void DraughtsBoard::loadGroundTruth(string pieces, int man_type, int king_type)
 	}
 }
 
+
+// **************************** PART 1 FUNCTIONS *******************************************
+
 // function that returns a greyscale probability image from back projection of input sample image on input original image
 Mat backProj(Mat& original_image, Mat& sample_image)
 {
@@ -414,19 +411,25 @@ Mat backProj(Mat& original_image, Mat& sample_image)
 	return back_proj_probs;
 }
 
-int max(int i, int j) {
-	if (i > j) {
-		return i;
-	}
-	else return j;
-}
-
 // compares the luminance values of four probability pixels and determines which class (if any) the pixel belongs to
 int return_class(int lum1, int lum2, int lum3, int lum4) {
-	
-	int comp1 = max(lum1, lum2);
-	int comp2 = max(lum3, lum4);
-	int overall = max(comp1, comp2);
+	int comp1 = 0;
+	int comp2 = 0;
+	int overall = 0;
+
+	// store the highest probability in the "overall" variable
+	if (lum1 > lum2)
+		comp1 = lum1;
+	else
+		comp1 = lum2;
+	if (lum3 > lum4)
+		comp2 = lum3;
+	else
+		comp2 = lum4;
+	if (comp1 > comp2)
+		overall = comp1;
+	else
+		overall = comp2;
 
 	int prob_thresh = 0; // arbitrary probability threshold selection
 
@@ -448,14 +451,21 @@ int return_class(int lum1, int lum2, int lum3, int lum4) {
 	else return 5;
 }
 
-void Part1(DraughtsBoard board, Mat white_pieces_image, Mat black_pieces_image, Mat white_squares_image, Mat black_squares_image) {
+//void Part1(DraughtsBoard board, Mat white_pieces_image, Mat black_pieces_image, Mat white_squares_image, Mat black_squares_image) {
+void Part1(string filename, Mat white_pieces_image, Mat black_pieces_image, Mat white_squares_image, Mat black_squares_image) {
 	// back-project the four sample images onto the original image
 	// this generates four separate probability models for the four object types
 
-	Mat white_piece_back_proj_probs = backProj(board.mOriginalImage, white_pieces_image);
-	Mat black_piece_back_proj_probs = backProj(board.mOriginalImage, black_pieces_image);
-	Mat white_square_back_proj_probs = backProj(board.mOriginalImage, white_squares_image);
-	Mat black_square_back_proj_probs = backProj(board.mOriginalImage, black_squares_image);
+	string full_filename = "Media/" + filename;
+	Mat original_image = imread(full_filename, -1);
+
+	if (original_image.empty())
+		cout << "Cannot open image file: " << full_filename << endl;
+
+	Mat white_piece_back_proj_probs = backProj(original_image, white_pieces_image);
+	Mat black_piece_back_proj_probs = backProj(original_image, black_pieces_image);
+	Mat white_square_back_proj_probs = backProj(original_image, white_squares_image);
+	Mat black_square_back_proj_probs = backProj(original_image, black_squares_image);
 
 	Mat intermediate1, intermediate2, intermediate3, intermediate4;
 	Mat white_piece, black_piece, white_square, black_square;
@@ -468,7 +478,7 @@ void Part1(DraughtsBoard board, Mat white_pieces_image, Mat black_pieces_image, 
 	cvtColor(black_square_back_proj_probs, intermediate4, COLOR_GRAY2BGR);
 	cvtColor(intermediate4, black_square, COLOR_BGR2HLS);
 
-	Mat part1 = board.mOriginalImage.clone();
+	Mat part1 = original_image.clone();
 
 	for (int row = 0; row < part1.rows; row++) {
 		for (int col = 0; col < part1.cols; col++) {
@@ -517,6 +527,8 @@ void Part1(DraughtsBoard board, Mat white_pieces_image, Mat black_pieces_image, 
 	}
 	imshow("Part 1", part1);
 }
+
+// ************************** PART 2 FUNCTIONS **********************************************
 
 // takes a filename for a board still image and three samples for histogram comparison as inputs
 // outputs strings representing the positions of white and black pieces
@@ -631,6 +643,8 @@ void Part2(string filename, Mat white_on_square, Mat black_on_square, Mat empty_
 	}
 }
 
+// function to convert a board representation to a length-32 integer array where empty = 0, white = 1, black = 2 
+// this makes the confusion matrix calculations easier
 void board_representation_from_strings_to_array(string whites, string blacks, string (&positions)[32]) {
 	vector<string> white_positions;
 	vector<string> white_king_positions;
@@ -723,6 +737,8 @@ void display_matrix(ConfusionMatrix conf) {
 	cout << left << setw(nameWidth) << setfill(space) << "" << left << setw(nameWidth) << setfill(space) << "Black Piece" << left << setw(nameWidth) << setfill(space) << conf.pred_black_truth_empt << left << setw(nameWidth) << setfill(space) << conf.pred_black_truth_white << left << setw(nameWidth) << setfill(space) << conf.pred_black_truth_black << endl;
 	cout << endl;
 }
+
+// **************************** PART 3 FUNCTIONS **********************************************
 
 void process_move(string before, string after, int& from, int& to) {
 	// check the two strings
@@ -848,9 +864,7 @@ void MyApplication()
 	{
 		// ********************************************** PART 1 *******************************************************
 		int image_index = 21;
-		DraughtsBoard sample_board(GROUND_TRUTH_FOR_BOARD_IMAGES[image_index][0], GROUND_TRUTH_FOR_BOARD_IMAGES[image_index][1], GROUND_TRUTH_FOR_BOARD_IMAGES[image_index][2]);
-
-		Part1(sample_board, white_pieces_image, black_pieces_image, white_squares_image, black_squares_image);
+		Part1(GROUND_TRUTH_FOR_BOARD_IMAGES[image_index][0], white_pieces_image, black_pieces_image, white_squares_image, black_squares_image);
 
 		// ********************************************** PART 2 *******************************************************
 		// 
@@ -1064,3 +1078,4 @@ void MyApplication()
 		*/
 	}
 }
+ 
