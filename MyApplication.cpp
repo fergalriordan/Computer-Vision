@@ -740,6 +740,10 @@ void display_matrix(ConfusionMatrix conf) {
 
 // **************************** PART 3 FUNCTIONS **********************************************
 
+void generate_stills() {
+
+}
+
 void process_move(string before, string after, int& from, int& to) {
 	// check the two strings
 	// if the two strings contain the same number of values but differ by one position, a valid move has been recorded
@@ -839,12 +843,9 @@ void MyApplication()
 	string empty_square_name = "Media/empty_square_sample.jpg";
 	Mat empty_square = imread(empty_square_name);
 
-	string hand_in_front_name = "Media/Foregrounds/Fore19.png";
-	Mat blocked = imread(hand_in_front_name);
-
 	string background_filename("Media/DraughtsGame1EmptyBoard.JPG");
 	Mat static_background_image = imread(background_filename, -1);
-	if ((!video.isOpened()) || (black_pieces_image.empty()) || (white_pieces_image.empty()) || (black_squares_image.empty()) || (white_squares_image.empty()) || (static_background_image.empty()) || (blocked.empty()))
+	if ((!video.isOpened()) || (black_pieces_image.empty()) || (white_pieces_image.empty()) || (black_squares_image.empty()) || (white_squares_image.empty()) || (static_background_image.empty()))
 	{
 		// Error attempting to load something.
 		if (!video.isOpened())
@@ -868,7 +869,7 @@ void MyApplication()
 
 		// ********************************************** PART 2 *******************************************************
 		// 
-
+		
 		// initialise a struct to record the confusion matrix data associated with the move predictions
 		ConfusionMatrix conf;
 		conf.pred_empt_truth_empt = 0;
@@ -941,66 +942,18 @@ void MyApplication()
 		}
 
 		display_matrix(conf); // display the confusion matrix
-
+		
 		// ********************************************** PART 3 *******************************************************
 
-		int gt_moves[68][3];
-		int moves[68][3]; // for the time-being, store the move data in a fixed-size string: this is because i am testing my move detection on the ground truth. when using real predictions, a dynamically sized data structure (vector??) will be required as i don't know how many moves my video processing will detect
-		string gt_before = "";
-		string gt_after = "";
-		
-		string inactive_before = "";
-		string inactive_after = "";
-		string before = "";
-		string after = "";
-
-		for (int i = 1; i < 69; i++) {
-			if (i % 2 != 0) {
-				// odd = white move
-				gt_before = GROUND_TRUTH_FOR_BOARD_IMAGES[i-1][1];
-				gt_after = GROUND_TRUTH_FOR_BOARD_IMAGES[i][1];
-				Part2(GROUND_TRUTH_FOR_BOARD_IMAGES[i-1][0], white_on_square, black_on_square, empty_square, before, inactive_before);
-				Part2(GROUND_TRUTH_FOR_BOARD_IMAGES[i][0], white_on_square, black_on_square, empty_square, after, inactive_after);
-
-				process_move(gt_before, gt_after, gt_moves[i-1][1], gt_moves[i-1][2]);
-				process_move(before, after, moves[i-1][1], moves[i-1][2]);
-				cout << i << endl;
-				cout << "GT Before: " << gt_before << endl;
-				cout << "GT After: " << gt_after << endl;
-				cout << "Pred Before: " << before << endl;
-				cout << "Pred After: " << after << endl;
-			}
-			else {
-				// even = black move
-				gt_before = GROUND_TRUTH_FOR_BOARD_IMAGES[i-1][2];
-				gt_after = GROUND_TRUTH_FOR_BOARD_IMAGES[i][2];
-				Part2(GROUND_TRUTH_FOR_BOARD_IMAGES[i - 1][0], white_on_square, black_on_square, empty_square, inactive_before, before);
-				Part2(GROUND_TRUTH_FOR_BOARD_IMAGES[i][0], white_on_square, black_on_square, empty_square, inactive_after, after);
-
-				process_move(gt_before, gt_after, gt_moves[i - 1][1], gt_moves[i-1][2]);
-				process_move(before, after, moves[i - 1][1], moves[i-1][2]);
-				cout << i << endl;
-				cout << "GT Before: " << gt_before << endl;
-				cout << "GT After: " << gt_after << endl;
-				cout << "Pred Before: " << before << endl;
-				cout << "Pred After: " << after << endl;
-			}
-
-			if (moves[i - 1][1] == -1 || moves[i - 1][2] == -1)
-				cout << "Mismatching number of pieces detected! An invalid move was recorded." << endl << endl;
-			else if (moves[i - 1][1] == 0 || moves[i - 1][2] == 0)
-				cout << "Before and after are identical. No move was detected." << endl << endl;
-			else 
-				cout << moves[i - 1][1] << "-" << moves[i-1][2] << endl << endl;
-		}
+		cout << "Part 3 still image generation in process... " << endl << endl;
 
 		// Process video frame by frame
-		/*Mat current_frame;
+		Mat current_frame;
 		video.set(cv::CAP_PROP_POS_FRAMES, 1);
 		video >> current_frame;
 		double last_time = static_cast<double>(getTickCount());
 		double frame_rate = video.get(cv::CAP_PROP_FPS);
-		double time_between_frames = 3.0 / frame_rate;
+		double time_between_frames = 1000.0 / frame_rate;
 
 		Ptr<BackgroundSubtractorMOG2> gmm = createBackgroundSubtractorMOG2();
 
@@ -1011,8 +964,10 @@ void MyApplication()
 		string foreground_screenshot_name = "Fore";
 		string back_proj_img_name = "BP";
 
-		while (!current_frame.empty())
-		{
+		imwrite("Media/Screenshots/Move0.png", current_frame); // store the first frame
+
+		//while (!current_frame.empty())
+		while (frame_number < 1527) {
 			double current_time = static_cast<double>(getTickCount());
 			double duration = (current_time - last_time) / getTickFrequency() / 1000.0;
 			int delay = (time_between_frames > duration) ? ((int)(time_between_frames - duration)) : 1;
@@ -1020,7 +975,6 @@ void MyApplication()
 			//imshow("Draughts video", current_frame);
 			video >> current_frame;
 
-			// *********************************************************************************************
 			Mat foreground_mask, thresholded_image, closed_image;
 			Mat structuring_element(3, 3, CV_8U, Scalar(1));
 			Mat foreground_image = Mat::zeros(current_frame.size(), CV_8UC3);
@@ -1032,12 +986,8 @@ void MyApplication()
 			threshold(foreground_mask, moving_incl_shadows, 50, 255, THRESH_BINARY);
 			absdiff(thresholded_image, moving_incl_shadows, shadow_points);
 			Mat cleaned_foreground_mask;
-			//if (clean_binary_images) // assume that the image is not clean
-			//{
-				morphologyEx(thresholded_image, closed_image, MORPH_CLOSE, structuring_element);
-				morphologyEx(closed_image, cleaned_foreground_mask, MORPH_OPEN, structuring_element);
-			//}
-			//else cleaned_foreground_mask = thresholded_image.clone();
+			morphologyEx(thresholded_image, closed_image, MORPH_CLOSE, structuring_element);
+			morphologyEx(closed_image, cleaned_foreground_mask, MORPH_OPEN, structuring_element);
 			foreground_image.setTo(Scalar(0, 0, 0));
 			current_frame.copyTo(foreground_image, cleaned_foreground_mask);
 			// Create an average background image (just for information)
@@ -1046,22 +996,31 @@ void MyApplication()
 			
 			if (frame_count > 15) {
 
-				Mat probability_image = backProj(blocked, foreground_image);
+				int non_zero_pixel_count = 0;
+				for (int row = 0; row < foreground_image.rows; row++) {
+					for (int col = 0; col < foreground_image.cols; col++) {
+						Vec3b pixel = foreground_image.at<Vec3b>(row, col);
+						if (pixel[0] != 0 || pixel[1] != 0 && pixel[2] != 0)
+							non_zero_pixel_count++;
+					}
+				}
 
-				screenshot_number++;
-				cout << "Screenshot! Frame " << screenshot_number << endl;
-				cout << "Frame Number " << frame_number << endl;
-				frame_count = 0;
+				if (non_zero_pixel_count < 2000) {
+					screenshot_number++;
+					//cout << "Screenshot! Move " << screenshot_number << endl;
+					//cout << "Frame Number " << frame_number << endl;
+					//cout << "Non-Zero Pixel Count: " << non_zero_pixel_count << endl;
+					frame_count = 0;
 
-				board_screenshot_name = board_screenshot_name + to_string(screenshot_number);
-				foreground_screenshot_name = foreground_screenshot_name + to_string(screenshot_number);
-				back_proj_img_name = back_proj_img_name + to_string(screenshot_number);
-				cout << "Writing file " << board_screenshot_name << " to Media/Screenshots" << endl;
-				imwrite("Media/Screenshots/" + board_screenshot_name + ".png", current_frame);
-				imwrite("Media/Foregrounds/" + foreground_screenshot_name + ".png", foreground_image);
-				imwrite("Media/BackProj/" + back_proj_img_name + ".png", probability_image);
-				board_screenshot_name = "Move";
-				foreground_screenshot_name = "Fore";
+					board_screenshot_name = board_screenshot_name + to_string(screenshot_number);
+					foreground_screenshot_name = foreground_screenshot_name + to_string(screenshot_number);
+					back_proj_img_name = back_proj_img_name + to_string(screenshot_number);
+					//cout << "Writing file " << board_screenshot_name << " to Media/Screenshots" << endl << endl;
+					imwrite("Media/Screenshots/" + board_screenshot_name + ".png", current_frame);
+					//imwrite("Media/Foregrounds/" + foreground_screenshot_name + ".png", foreground_image);
+					board_screenshot_name = "Move";
+					foreground_screenshot_name = "Fore";
+				}
 			}
 			
 			frame_number++;
@@ -1071,11 +1030,73 @@ void MyApplication()
 			Mat gaussian_output = JoinImagesHorizontally(temp_gaussian_output, "", foreground_image, "Foreground", 4);
 			imshow("Gaussian Mixture Model", gaussian_output);
 
-			char c = cv::waitKey(delay);  // If you replace delay with 1 it will play the video as quickly as possible.
+			char c = cv::waitKey(1);  // If you replace delay with 1 it will play the video as quickly as possible.
+			
 		}
-		
+
+		// now armed with a collection of still images taken of the draughts board 
+		// process these in the same manner as the ground truth stills
+		// eliminate any duplicates
+		// then process the moves
+
+		string prefix = "Screenshots/Move";
+		string previous, current;
+		//vector<Mat> still_images; // store the screenshot data in a vector of matrices
+		vector<string> white_pieces, black_pieces;
+		Mat image;
+
+		string whites1 = "";
+		string whites2 = "";
+		string blacks1 = "";
+		string blacks2 = "";
+
+		int count = 1;
+
+		string saved_still = "Media/Stills/Board";
+
+		for (int i = 0; i < 82; i++) {
+			previous = prefix + to_string(i) + ".png";
+			current = prefix + to_string(i + 1) + ".png";
+
+			Part2(previous, white_on_square, black_on_square, empty_square, whites1, blacks1);
+			Part2(current, white_on_square, black_on_square, empty_square, whites2, blacks2);
+
+			if (whites1 != whites2 || blacks1 != blacks2) { // if one of the sides has made a move (i.e. no duplicate detected)
+				white_pieces.push_back(whites1);
+				black_pieces.push_back(blacks1);
+				Mat still_to_save = imread("Media/" + previous); // read in the image i want to save
+				imwrite(saved_still + to_string(count) + ".png", still_to_save); // write it to the new folder location 
+				count++;
+			}
+
+			prefix = "Screenshots/Move";
+		}
+
+		int moves[72][2];
+
+		cout << setw(20) <<"Part 3, Move Detection: " << endl;
+
+		for (int i = 1; i < 69; i++) {
+			if (i % 2 != 0) {
+				process_move(white_pieces[i - 1], white_pieces[i], moves[i][0], moves[i][1]);
+			}
+			else {
+				process_move(black_pieces[i - 1], black_pieces[i], moves[i][0], moves[i][1]);
+			}
+			if (moves[i][0] == -1 || moves[i][1] == -1)
+				cout << i << setw(3) << ". " << setw(17) << "x-x" << GROUND_TRUTH_FOR_DRAUGHTSGAME1_VIDEO_MOVES[i - 1][1] << "-" << GROUND_TRUTH_FOR_DRAUGHTSGAME1_VIDEO_MOVES[i - 1][2] << endl;
+			else if (moves[i][0] == 0 || moves[i][1] == 0)
+				cout << i << setw(3) << ". " << setw(17) << "o-o" << GROUND_TRUTH_FOR_DRAUGHTSGAME1_VIDEO_MOVES[i - 1][1] << "-" << GROUND_TRUTH_FOR_DRAUGHTSGAME1_VIDEO_MOVES[i - 1][2] << endl;
+			else
+				cout << i << setw(3) << ". " << setw(2) << moves[i][0] << "-" << setw(2) << moves[i][1] << setw(12) << " " << GROUND_TRUTH_FOR_DRAUGHTSGAME1_VIDEO_MOVES[i - 1][1] << "-" << GROUND_TRUTH_FOR_DRAUGHTSGAME1_VIDEO_MOVES[i - 1][2] << endl;
+		}
+
+		cout << "\nKey: " << endl;
+		cout << setw(10) << "x-x = Mismatched number of pieces before and after, i.e. an invalid move was detected." << endl;
+		cout << setw(10) << "o-o = Pieces are identical before and after, i.e. no move was detected." << endl << endl;
+
 		cv::destroyAllWindows();
-		*/
+		
 	}
 }
  
