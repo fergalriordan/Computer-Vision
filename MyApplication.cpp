@@ -869,6 +869,8 @@ void MyApplication()
 
 		// ********************************************** PART 2 *******************************************************
 		// 
+
+		cout << endl << "Part 2: Processing the ground truth still images..." << endl << endl;
 		
 		// initialise a struct to record the confusion matrix data associated with the move predictions
 		ConfusionMatrix conf;
@@ -945,7 +947,7 @@ void MyApplication()
 		
 		// ********************************************** PART 3 *******************************************************
 
-		cout << "Part 3 still image generation in process... " << endl << endl;
+		cout << "Part 3: Screenshot generation in process... " << endl << endl;
 
 		// Process video frame by frame
 		Mat current_frame;
@@ -1039,6 +1041,8 @@ void MyApplication()
 		// eliminate any duplicates
 		// then process the moves
 
+		cout << endl << "Processing screenshots, eliminating duplicates and processing moves - this may take a while... " << endl << endl;
+
 		string prefix = "Screenshots/Move";
 		string previous, current;
 		//vector<Mat> still_images; // store the screenshot data in a vector of matrices
@@ -1074,7 +1078,7 @@ void MyApplication()
 
 		int moves[72][2];
 
-		cout << setw(20) <<"Part 3, Move Detection: " << endl;
+		cout << setw(20) <<"Part 3, Move Detection: " << endl << endl;
 
 		for (int i = 1; i < 69; i++) {
 			if (i % 2 != 0) {
@@ -1094,6 +1098,16 @@ void MyApplication()
 		cout << "\nKey: " << endl;
 		cout << setw(10) << "x-x = Mismatched number of pieces before and after, i.e. an invalid move was detected." << endl;
 		cout << setw(10) << "o-o = Pieces are identical before and after, i.e. no move was detected." << endl << endl;
+
+		// ********************************************** PART 4 *******************************************************
+
+
+
+		// ********************************************** PART 5 *******************************************************
+
+
+
+		// *********************************************** ~~~ *********************************************************
 
 		cv::destroyAllWindows();
 		
