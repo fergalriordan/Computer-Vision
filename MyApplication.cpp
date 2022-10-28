@@ -532,7 +532,8 @@ void Part1(string filename, Mat white_pieces_image, Mat black_pieces_image, Mat 
 
 // takes a filename for a board still image and three samples for histogram comparison as inputs
 // outputs strings representing the positions of white and black pieces
-void Part2(string filename, Mat white_on_square, Mat black_on_square, Mat empty_square, string& whites, string& blacks) {
+//void Part2(string filename, Mat white_on_square, Mat black_on_square, Mat empty_square, string& whites, string& blacks) {
+void Part2(string filename, Mat white_pieces_image, Mat black_pieces_image, Mat black_squares_image, string& whites, string& blacks) {
 
 	string full_filename = "Media/" + filename;
 	Mat original_image = imread(full_filename, -1);
@@ -573,7 +574,10 @@ void Part2(string filename, Mat white_on_square, Mat black_on_square, Mat empty_
 		for (int j = 0; j < 8; j++) {
 			// for only odd-even and even-odd values (i.e. for only black squares)
 			if ((i % 2 != 0) && (j % 2 == 0) || (j % 2 != 0) && (i % 2 == 0)) {
-				Rect current_square(block_width * i, block_height * j, block_width, block_height);
+				//Rect current_square(block_width * i, block_height * j, block_width, block_height);
+				// don't even take the full square: use a smaller inner section where a piece is most likely to be found
+				// inspect a 25x25 section at the centre of each square
+				Rect current_square((block_width * i + 12.5), (block_height * j + 12.5), (block_width - 25), (block_height - 25));
 				result_blocks.push_back(perspective_warped_image(current_square));
 			}
 		}
@@ -594,13 +598,23 @@ void Part2(string filename, Mat white_on_square, Mat black_on_square, Mat empty_
 	// generate three histograms to compare each square against 
 	// the samples used here were created using frame 21: not an ideal approach but gives the best results at the moment
 
-	Mat hls_empty_square, hls_white_piece, hls_black_piece, hls_unclassified_square;
+	/*Mat hls_empty_square, hls_white_piece, hls_black_piece, hls_unclassified_square;
 
 	cvtColor(empty_square, hls_empty_square, COLOR_BGR2HLS);
 	ColourHistogram empty_square_histogram(hls_empty_square, 4);
 	cvtColor(white_on_square, hls_white_piece, COLOR_BGR2HLS);
 	ColourHistogram white_piece_histogram(hls_white_piece, 4);
 	cvtColor(black_on_square, hls_black_piece, COLOR_BGR2HLS);
+	ColourHistogram black_piece_histogram(hls_black_piece, 4);
+	*/
+
+	Mat hls_empty_square, hls_white_piece, hls_black_piece, hls_unclassified_square;
+
+	cvtColor(black_squares_image, hls_empty_square, COLOR_BGR2HLS);
+	ColourHistogram empty_square_histogram(hls_empty_square, 4);
+	cvtColor(white_pieces_image, hls_white_piece, COLOR_BGR2HLS);
+	ColourHistogram white_piece_histogram(hls_white_piece, 4);
+	cvtColor(black_pieces_image, hls_black_piece, COLOR_BGR2HLS);
 	ColourHistogram black_piece_histogram(hls_black_piece, 4);
 
 	double empty_score = 0;
@@ -864,13 +878,21 @@ void MyApplication()
 	else
 	{
 		// ********************************************** PART 1 *******************************************************
+
 		int image_index = 21;
+
+		cout << setw(10) << "PART 1. " << endl << endl;
+
+		cout << "Ground Truth still image number " << image_index << " classified into white pieces, black pieces, white squares, black squares and background in image \"Part 1.\"" << endl << endl;
+
 		Part1(GROUND_TRUTH_FOR_BOARD_IMAGES[image_index][0], white_pieces_image, black_pieces_image, white_squares_image, black_squares_image);
 
 		// ********************************************** PART 2 *******************************************************
 		// 
 
-		cout << endl << "Part 2: Processing the ground truth still images..." << endl << endl;
+		cout << setw(10) << "PART 2. " << endl << endl;
+
+		cout << "Processing the ground truth still images..." << endl << endl;
 		
 		// initialise a struct to record the confusion matrix data associated with the move predictions
 		ConfusionMatrix conf;
@@ -908,7 +930,7 @@ void MyApplication()
 				predictions[j] = "0"; // start with empty predictions
 			}
 
-			Part2(GROUND_TRUTH_FOR_BOARD_IMAGES[i][0], white_on_square, black_on_square, empty_square, whites, blacks); // IMAGE PROCESSING OCCURS HERE
+			Part2(GROUND_TRUTH_FOR_BOARD_IMAGES[i][0], white_pieces_image, black_pieces_image, black_squares_image, whites, blacks); // IMAGE PROCESSING OCCURS HERE
 			board_representation_from_strings_to_array(whites, blacks, predictions); // convert the prediction strings to an array for easy generation of confusion matrix
 
 			// compare the predicted value of each square against the ground truth and update the confusion matrix
@@ -943,6 +965,7 @@ void MyApplication()
 			}
 		}
 
+		cout << "Confusion Matrix: " << endl;
 		display_matrix(conf); // display the confusion matrix
 		
 		// ********************************************** PART 3 *******************************************************
@@ -1058,7 +1081,7 @@ void MyApplication()
 
 		string saved_still = "Media/Stills/Board";
 
-		for (int i = 0; i < 82; i++) {
+		for (int i = 0; i < 83; i++) {
 			previous = prefix + to_string(i) + ".png";
 			current = prefix + to_string(i + 1) + ".png";
 
@@ -1077,15 +1100,32 @@ void MyApplication()
 		}
 
 		int moves[72][2];
+		int white_moves[72][2], black_moves[72][2];
 
 		cout << setw(20) <<"Part 3, Move Detection: " << endl << endl;
 
-		for (int i = 1; i < 69; i++) {
-			if (i % 2 != 0) {
-				process_move(white_pieces[i - 1], white_pieces[i], moves[i][0], moves[i][1]);
+		cout << "Move" << setw(10) << "Detected" << setw(10) << "Ground Truth" << endl;
+
+		int turn = 1;
+
+		for (int i = 1; i < 68; i++) {
+			// use the "turn" variable as a boolean indicator of which side's turn it is
+			if (turn > 0) {
+				turn = turn * -1;
+				process_move(white_pieces[i - 1], white_pieces[i], moves[i][0], moves[i][1]); 
+				if (moves[i][0] == 0 || moves[i][1] == 0) { // if no move has occurred, this means we are checking the wrong side
+					process_move(black_pieces[i - 1], black_pieces[i], moves[i][0], moves[i][1]);
+					turn = turn * -1;
+				}
+					
 			}
 			else {
+				turn = turn * -1;
 				process_move(black_pieces[i - 1], black_pieces[i], moves[i][0], moves[i][1]);
+				if (moves[i][0] == 0 || moves[i][1] == 0) {
+					process_move(white_pieces[i - 1], white_pieces[i], moves[i][0], moves[i][1]);
+					turn = turn * -1;
+				}
 			}
 			if (moves[i][0] == -1 || moves[i][1] == -1)
 				cout << i << setw(3) << ". " << setw(17) << "x-x" << GROUND_TRUTH_FOR_DRAUGHTSGAME1_VIDEO_MOVES[i - 1][1] << "-" << GROUND_TRUTH_FOR_DRAUGHTSGAME1_VIDEO_MOVES[i - 1][2] << endl;
@@ -1098,6 +1138,9 @@ void MyApplication()
 		cout << "\nKey: " << endl;
 		cout << setw(10) << "x-x = Mismatched number of pieces before and after, i.e. an invalid move was detected." << endl;
 		cout << setw(10) << "o-o = Pieces are identical before and after, i.e. no move was detected." << endl << endl;
+
+		cout << "Note: Move 40 is missed by the video processing algorithm and thus one move less than the ground truth is detected." << endl;
+		cout << "As a result, each output Detected[i] after Move 39 corresponds to GroundTruth[i+1]" << endl;
 
 		// ********************************************** PART 4 *******************************************************
 
