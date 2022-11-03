@@ -704,6 +704,48 @@ struct ConfusionMatrix
 	int pred_black_truth_empt, pred_black_truth_white, pred_black_truth_black;
 };
 
+void initialise_matrix(ConfusionMatrix& conf) {
+	conf.pred_empt_truth_empt = 0;
+	conf.pred_empt_truth_white = 0;
+	conf.pred_empt_truth_black = 0;
+	conf.pred_white_truth_empt = 0;
+	conf.pred_white_truth_white = 0;
+	conf.pred_white_truth_black = 0;
+	conf.pred_black_truth_empt = 0;
+	conf.pred_black_truth_white = 0;
+	conf.pred_black_truth_black = 0;
+}
+
+void update_confusion_matrix(string prediction, string BOARD_TRUTH, ConfusionMatrix& conf) {
+	if (prediction == "0" && BOARD_TRUTH == "0") {
+		conf.pred_empt_truth_empt++;
+	}
+	else if (prediction == "0" && BOARD_TRUTH == "1") {
+		conf.pred_empt_truth_white++;
+	}
+	else if (prediction == "0" && BOARD_TRUTH == "2") {
+		conf.pred_empt_truth_black++;
+	}
+	else if (prediction == "1" && BOARD_TRUTH == "0") {
+		conf.pred_white_truth_empt++;
+	}
+	else if (prediction == "1" && BOARD_TRUTH == "1") {
+		conf.pred_white_truth_white++;
+	}
+	else if (prediction == "1" && BOARD_TRUTH == "2") {
+		conf.pred_white_truth_black++;
+	}
+	else if (prediction == "2" && BOARD_TRUTH == "0") {
+		conf.pred_black_truth_empt++;
+	}
+	else if (prediction == "2" && BOARD_TRUTH == "1") {
+		conf.pred_black_truth_white++;
+	}
+	else if (prediction == "2" && BOARD_TRUTH == "2") {
+		conf.pred_black_truth_black++;
+	}
+}
+
 void display_matrix(ConfusionMatrix conf) {
 	const char space = ' ';
 	const int nameWidth = 15;
@@ -800,9 +842,9 @@ void process_move(string before, string after, int& from, int& to) {
 
 // **************************** PART 5 FUNCTIONS **********************************************
 
-int Circles(Mat result_image, vector<Vec3f> circles, Scalar passed_colour = -1.0)
+// this is a direct copy of DrawCircles as included in Edges.cpp
+void Draw_Circles(Mat result_image, vector<Vec3f> circles, Scalar passed_colour = -1.0)
 {
-	int count = 0;
 	for (vector<cv::Vec3f>::const_iterator current_circle = circles.begin();
 		(current_circle != circles.end()); current_circle++)
 	{
@@ -810,9 +852,7 @@ int Circles(Mat result_image, vector<Vec3f> circles, Scalar passed_colour = -1.0
 		circle(result_image, Point((int)((*current_circle)[0]), int((*current_circle)[1])), (int)((*current_circle)[2]),
 			(passed_colour.val[0] == -1.0) ? colour : passed_colour,
 			2);
-		count++;
 	}
-	return count; // return the number of circles detected
 }
 
 // much of this function is identical to Part2() - it is simply an extension of the Part 2 function
@@ -849,26 +889,20 @@ Mat perspective(string filename) {
 void Part5(Mat perspective_warped_image, vector<Vec3f> &circles, Mat white_pieces_image, Mat black_pieces_image, Mat black_squares_image, string& whites, string& blacks) {
 
 	Mat gray_warped;
-	perspective_warped_image.convertTo(perspective_warped_image, CV_8UC1);
-	circles.clear();
-
 	cvtColor(perspective_warped_image, gray_warped, COLOR_BGR2GRAY);
-	medianBlur(gray_warped, gray_warped, 5);
+	medianBlur(gray_warped, gray_warped, 5); // apply blur to the image to reduce likelihood of detecting false circles
 
 	HoughCircles(gray_warped, circles, cv::HOUGH_GRADIENT, 1, 8, 100, 10, 15, 20);
 	Mat hough_circles_image = perspective_warped_image.clone();
-	int circle_count = Circles(hough_circles_image, circles);
+	Draw_Circles(hough_circles_image, circles);
 	imshow("Hough transformation", hough_circles_image);
+	// perform hough circle operation on the full image a single time rather than on each square individually
 
+	// subsequently work out which square each circle belongs to 
 	int square_circles[32];
 	for (int i = 0; i < 32; i++) {
 		square_circles[i] = 0;
 	}
-	
-	// for some reason when i perform the hough circle operation on individual squares, it doesnt work properly
-	// therefore my only choice is to perform it on the full image
-	// and then retrospectively work out which square each of the circles resides in retrospectively
-	// that is what i am doing below
 	for (int i = 0; i < circles.size(); i++) {
 		for (int j = 0; j < 4; j++) {
 			if (circles[i][0] >= (j*100) && circles[i][0] <= (j*100 + 50)) {
@@ -886,7 +920,6 @@ void Part5(Mat perspective_warped_image, vector<Vec3f> &circles, Mat white_piece
 				}
 			}
 		}
-
 		for (int j = 0; j < 4; j++) {
 			if (circles[i][0] >= (j * 100 + 50) && circles[i][0] <= (j * 100 + 100)) {
 				if (circles[i][1] >= 0 && circles[i][1] <= 50) {
@@ -903,18 +936,14 @@ void Part5(Mat perspective_warped_image, vector<Vec3f> &circles, Mat white_piece
 				}
 			}
 		}
-
 	}
-	
-	//***************************************************************************************************************
-	
-	// Divide the image into 64 equally sized blocks: in other words, 64 50x50 blocks (assuming the image is 400x400)
-	// Each block corresponds to one of the squares on the board
-	// Only need to process 32 of these: the 32 squares that are black
+
+	// the code below is identical to the image processing that occurs in Part2()
+	// the image is divided into its squares and then classified by histogram comparison
 	int block_width = perspective_warped_image.cols / 8;
 	int block_height = perspective_warped_image.rows / 8;
 	
-	vector<Mat> colour_blocks, circle_blocks;
+	vector<Mat> colour_blocks;
 	for (int i = 0; i < 8; i++) {
 		for (int j = 0; j < 8; j++) {
 			// for only odd-even and even-odd values (i.e. for only black squares)
@@ -922,15 +951,9 @@ void Part5(Mat perspective_warped_image, vector<Vec3f> &circles, Mat white_piece
 				// don't even take the full square: use a smaller inner section where a piece is most likely to be found
 				Rect inner_square((block_width * i + 12.5), (block_height * j + 12.5), (block_width - 25), (block_height - 25));
 				colour_blocks.push_back(perspective_warped_image(inner_square));
-
-				// use full square for Hough circle detection
-				Rect full_square(block_width*i, block_height*j, block_width, block_height);
-				circle_blocks.push_back(hough_circles_image(full_square));
 			}
 		}
 	}
-	// The 32 squares are now stored in a vector in an order consistent with Portable Draughts Notation
-	// Now go through each square one-by-one and identify whether it contains a white piece, black piece or is empty
 	
 	// generate three histograms to compare each square against 
 	Mat hls_empty_square, hls_white_piece, hls_black_piece, hls_unclassified_square, grayscale_man_vs_king;
@@ -1267,7 +1290,7 @@ void MyApplication()
 	else
 	{
 		// ********************************************** PART 1 *******************************************************
-		/*
+		
 		int image_index = 0;
 
 		cout << "PART 1. " << endl << endl;
@@ -1301,7 +1324,7 @@ void MyApplication()
 
 			imshow("Pixel Classification", output);
 			imshow("Ground Truth", move0_ground_truth_image);
-			cout << "Correct Pixels: " << correct_pixels << endl;
+			cout << endl << "Correct Pixels: " << correct_pixels << endl;
 			cout << "Total Pixels: " << total_pixels << endl;
 			cout.precision(3);
 			cout << "Accuracy = " << accuracy << "%" << endl << endl;
@@ -1311,25 +1334,18 @@ void MyApplication()
 			imshow("Pixel Classification", output);
 			cout << "Set the image_index variable to 0 next time to get a quantitative assessment of the solution." << endl << endl;
 		}
-		*/
+
+		char c = cv::waitKey();
+		cv::destroyAllWindows();
+
 		// ********************************************** PART 2 *******************************************************
-		/*
-		cout << setw(10) << "PART 2. " << endl << endl;
+		
+		cout << endl << "PART 2." << endl;
 
 		cout << "Processing the ground truth still images..." << endl << endl;
 
-		// initialise a struct to record the confusion matrix data associated with the move predictions
-		// this should be in a function but for some reason an error was being thrown so the struct parameters are initialised here instead
 		ConfusionMatrix conf;
-		conf.pred_empt_truth_empt = 0;
-		conf.pred_empt_truth_white = 0;
-		conf.pred_empt_truth_black = 0;
-		conf.pred_white_truth_empt = 0;
-		conf.pred_white_truth_white = 0;
-		conf.pred_white_truth_black = 0;
-		conf.pred_black_truth_empt = 0;
-		conf.pred_black_truth_white = 0;
-		conf.pred_black_truth_black = 0;
+		initialise_matrix(conf); // initialise a struct to store the confusion matrix data
 
 		// convert the provided ground truth data to a two-dimensional array: this makes the computation of a confusion matrix simpler
 		string BOARD_TRUTH[69][32];
@@ -1360,42 +1376,21 @@ void MyApplication()
 
 			// compare the predicted value of each square against the ground truth and update the confusion matrix
 			for (int j = 0; j < 32; j++) {
-				if (predictions[j] == "0" && BOARD_TRUTH[i][j] == "0") {
-					conf.pred_empt_truth_empt++;
-				}
-				else if (predictions[j] == "0" && BOARD_TRUTH[i][j] == "1") {
-					conf.pred_empt_truth_white++;
-				}
-				else if (predictions[j] == "0" && BOARD_TRUTH[i][j] == "2") {
-					conf.pred_empt_truth_black++;
-				}
-				else if (predictions[j] == "1" && BOARD_TRUTH[i][j] == "0") {
-					conf.pred_white_truth_empt++;
-				}
-				else if (predictions[j] == "1" && BOARD_TRUTH[i][j] == "1") {
-					conf.pred_white_truth_white++;
-				}
-				else if (predictions[j] == "1" && BOARD_TRUTH[i][j] == "2") {
-					conf.pred_white_truth_black++;
-				}
-				else if (predictions[j] == "2" && BOARD_TRUTH[i][j] == "0") {
-					conf.pred_black_truth_empt++;
-				}
-				else if (predictions[j] == "2" && BOARD_TRUTH[i][j] == "1") {
-					conf.pred_black_truth_white++;
-				}
-				else if (predictions[j] == "2" && BOARD_TRUTH[i][j] == "2") {
-					conf.pred_black_truth_black++;
-				}
+				update_confusion_matrix(predictions[j], BOARD_TRUTH[i][j], conf);
 			}
 		}
 
 		cout << "Confusion Matrix: " << endl;
-		display_matrix(conf); // display the confusion matrix
-		*/
+		display_matrix(conf); 
+
+		c = cv::waitKey();
+		cv::destroyAllWindows();
+		
 		// ********************************************** PART 3 *******************************************************
-		/*
-		cout << "Part 3: Screenshot generation in process... " << endl << endl;
+		
+		cout << endl << "PART 3" << endl;
+
+		cout << "Screenshot generation in process... " << endl;
 
 		// Process video frame by frame
 		Mat current_frame;
@@ -1491,7 +1486,7 @@ void MyApplication()
 		// eliminate any duplicates
 		// then process the moves
 
-		cout << endl << "Processing screenshots, eliminating duplicates and processing moves - this may take a while... " << endl << endl;
+		cout << endl << "Eliminating duplicate screenshots and processing moves - this may take a moment... " << endl << endl;
 
 		string prefix = "Screenshots/Move";
 		string previous, current;
@@ -1565,10 +1560,6 @@ void MyApplication()
 				out = "N/A";
 			string ground_t = to_string(GROUND_TRUTH_FOR_DRAUGHTSGAME1_VIDEO_MOVES[i - 1][1]) + "-" + to_string(GROUND_TRUTH_FOR_DRAUGHTSGAME1_VIDEO_MOVES[i - 1][2]);
 
-			if (i == 35) {
-				cout << endl << endl;
-			}
-
 			if (moves[i][0] == -1 || moves[i][1] == -1)
 				cout << setw(2) << i << setw(12) << " " << GROUND_TRUTH_FOR_DRAUGHTSGAME1_VIDEO_MOVES[i - 1][1] << "-" << GROUND_TRUTH_FOR_DRAUGHTSGAME1_VIDEO_MOVES[i - 1][2] << setw(12) << " " << "x-x" << endl;
 			else if (moves[i][0] == 0 || moves[i][1] == 0)
@@ -1582,10 +1573,13 @@ void MyApplication()
 		cout << "o-o = Pieces are identical before and after, i.e. no move was detected." << endl << endl;
 
 		cout << "Note: Move 38 is missed by the video processing algorithm and thus one move less than the ground truth is detected." << endl;
-		cout << "As a result, each output Detected[i] after Move 38 corresponds to GroundTruth[i+1]" << endl;
-		*/
+		cout << "As a result, each output Detected[i] after Move 38 corresponds to GroundTruth[i+1]" << endl << endl;
+
+		c = cv::waitKey();
+		cv::destroyAllWindows();
+		
 		// ********************************************** PART 4 *******************************************************
-		/*
+		
 		int p4_index = 22;
 
 		string full_filename = "Media/" + GROUND_TRUTH_FOR_BOARD_IMAGES[p4_index][0];
@@ -1634,21 +1628,27 @@ void MyApplication()
 		//drawChessboardCorners(p4_image, patternsize, Mat(corners), patternfound);
 
 		//imshow("Corners", p4_image);
-		*/
+
+		c = cv::waitKey();
+		cv::destroyAllWindows();
+		
 		// ********************************************** PART 5 *******************************************************
+		
+		cout << endl << "PART 5." << endl;
 
 		ExtendedConfusionMatrix ext_conf;
 		initialise_extended_matrix(ext_conf);
 
-		string BOARD_TRUTH[69][32];
-		string buffer[32];
-		string predictions[32];
+		//string BOARD_TRUTH[69][32];
+		//string buffer[32];
+		//string predictions[32];
 		string white_team = "";
 		string black_team = "";
 
 		for (int i = 0; i < 32; i++) {
 			buffer[i] = "0"; // start with an empty buffer
 		}
+
 		for (int i = 0; i < 69; i++) {
 			extended_board_representation_from_strings_to_array(GROUND_TRUTH_FOR_BOARD_IMAGES[i][1], GROUND_TRUTH_FOR_BOARD_IMAGES[i][2], buffer);
 			for (int j = 0; j < 32; j++) {
@@ -1657,9 +1657,8 @@ void MyApplication()
 			}
 		}
 
+		vector<Vec3f> circles; // this needs to be initialised outside the for loop and passed by reference otherwise HoughCircles() throws an assertion error
 
-		// &&&&&&&&&&&&&&&&&&&&&&&&&&& WORK OUT HOW TO LOOP THIS FOR 69 FRAMES WITHOUT AN ASSERTION ERROR AND PART 5 IS COMPLETE
-		vector<Vec3f> circles;
 		for (int i = 0; i < 69; i++) {
 
 			for (int j = 0; j < 32; j++) {
@@ -1667,30 +1666,22 @@ void MyApplication()
 			}
 
 			Mat perspective_transformed_img = perspective(GROUND_TRUTH_FOR_BOARD_IMAGES[i][0]);
-			//vector<Vec3f> circles;
-
-			circles.clear();
 
 			Part5(perspective_transformed_img, circles, white_pieces_image, black_pieces_image, black_squares_image, white_team, black_team); // IMAGE PROCESSING OCCURS HERE
 
-			circles.clear();
-
 			extended_board_representation_from_strings_to_array(white_team, black_team, predictions); // convert the prediction strings to an array for easy generation of confusion matrix
-
-			// compare the predicted value of each square against the ground truth and update the confusion matrix
 			for (int j = 0; j < 32; j++) {
-				update_extended_confusion_matrix(predictions[j], BOARD_TRUTH[i][j], ext_conf);
+				update_extended_confusion_matrix(predictions[j], BOARD_TRUTH[i][j], ext_conf); // compare predicted board against ground truth
 			}
 
 		}
 
-		// &&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&
-
 		display_extended_matrix(ext_conf);
-
+		
 		// *********************************************** ~~~ *********************************************************
 
-		//cv::destroyAllWindows();
+		c = cv::waitKey();
+		cv::destroyAllWindows();
 		
 	}
 }
