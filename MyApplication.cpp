@@ -431,7 +431,7 @@ int return_class(int lum1, int lum2, int lum3, int lum4) {
 	else
 		overall = comp2;
 
-	int prob_thresh = 0; // arbitrary probability threshold selection
+	int prob_thresh = 5; // arbitrary probability threshold selection: turns out it needs to be very low, otherwise many board pixels are incorrectly classified as background
 
 	if (overall > prob_thresh) {
 		if (overall == lum1) {
@@ -451,10 +451,7 @@ int return_class(int lum1, int lum2, int lum3, int lum4) {
 	else return 5;
 }
 
-//void Part1(DraughtsBoard board, Mat white_pieces_image, Mat black_pieces_image, Mat white_squares_image, Mat black_squares_image) {
-void Part1(string filename, Mat white_pieces_image, Mat black_pieces_image, Mat white_squares_image, Mat black_squares_image) {
-	// back-project the four sample images onto the original image
-	// this generates four separate probability models for the four object types
+void Part1(string filename, Mat white_pieces_image, Mat black_pieces_image, Mat white_squares_image, Mat black_squares_image, Mat& output) {
 
 	string full_filename = "Media/" + filename;
 	Mat original_image = imread(full_filename, -1);
@@ -462,6 +459,7 @@ void Part1(string filename, Mat white_pieces_image, Mat black_pieces_image, Mat 
 	if (original_image.empty())
 		cout << "Cannot open image file: " << full_filename << endl;
 
+	// back-project the four sample images onto the original image to generate four separate probability models for the four object types
 	Mat white_piece_back_proj_probs = backProj(original_image, white_pieces_image);
 	Mat black_piece_back_proj_probs = backProj(original_image, black_pieces_image);
 	Mat white_square_back_proj_probs = backProj(original_image, white_squares_image);
@@ -478,10 +476,10 @@ void Part1(string filename, Mat white_pieces_image, Mat black_pieces_image, Mat 
 	cvtColor(black_square_back_proj_probs, intermediate4, COLOR_GRAY2BGR);
 	cvtColor(intermediate4, black_square, COLOR_BGR2HLS);
 
-	Mat part1 = original_image.clone();
+	output = original_image.clone();
 
-	for (int row = 0; row < part1.rows; row++) {
-		for (int col = 0; col < part1.cols; col++) {
+	for (int row = 0; row < output.rows; row++) {
+		for (int col = 0; col < output.cols; col++) {
 			Vec3b pixel1 = white_piece.at<Vec3b>(row, col);
 			Vec3b pixel2 = black_piece.at<Vec3b>(row, col);
 			Vec3b pixel3 = white_square.at<Vec3b>(row, col);
@@ -492,47 +490,45 @@ void Part1(string filename, Mat white_pieces_image, Mat black_pieces_image, Mat 
 			switch (pixel_class) {
 			case 1:
 				// white pieces = white
-				part1.at<Vec3b>(row, col)[0] = 255;
-				part1.at<Vec3b>(row, col)[1] = 255;
-				part1.at<Vec3b>(row, col)[2] = 255;
+				output.at<Vec3b>(row, col)[0] = 255;
+				output.at<Vec3b>(row, col)[1] = 255;
+				output.at<Vec3b>(row, col)[2] = 255;
 				break;
 
 			case 2:
 				// black pieces = black
-				part1.at<Vec3b>(row, col)[0] = 0;
-				part1.at<Vec3b>(row, col)[1] = 0;
-				part1.at<Vec3b>(row, col)[2] = 0;
+				output.at<Vec3b>(row, col)[0] = 0;
+				output.at<Vec3b>(row, col)[1] = 0;
+				output.at<Vec3b>(row, col)[2] = 0;
 				break;
 
 			case 3:
 				// white squares = red
-				part1.at<Vec3b>(row, col)[0] = 0;
-				part1.at<Vec3b>(row, col)[1] = 0;
-				part1.at<Vec3b>(row, col)[2] = 255;
+				output.at<Vec3b>(row, col)[0] = 0;
+				output.at<Vec3b>(row, col)[1] = 0;
+				output.at<Vec3b>(row, col)[2] = 255;
 				break;
 			case 4:
 				// black squares = green
-				part1.at<Vec3b>(row, col)[0] = 0;
-				part1.at<Vec3b>(row, col)[1] = 255;
-				part1.at<Vec3b>(row, col)[2] = 0;
+				output.at<Vec3b>(row, col)[0] = 0;
+				output.at<Vec3b>(row, col)[1] = 255;
+				output.at<Vec3b>(row, col)[2] = 0;
 				break;
 			default:
 				// background/non-object pixels = blue
-				part1.at<Vec3b>(row, col)[0] = 255;
-				part1.at<Vec3b>(row, col)[1] = 0;
-				part1.at<Vec3b>(row, col)[2] = 0;
+				output.at<Vec3b>(row, col)[0] = 255;
+				output.at<Vec3b>(row, col)[1] = 0;
+				output.at<Vec3b>(row, col)[2] = 0;
 				break;
 			}
 		}
 	}
-	imshow("Part 1", part1);
 }
 
 // ************************** PART 2 FUNCTIONS **********************************************
 
-// takes a filename for a board still image and three samples for histogram comparison as inputs
+// takes a filename for a board image and three samples for histogram comparison as inputs
 // outputs strings representing the positions of white and black pieces
-//void Part2(string filename, Mat white_on_square, Mat black_on_square, Mat empty_square, string& whites, string& blacks) {
 void Part2(string filename, Mat white_pieces_image, Mat black_pieces_image, Mat black_squares_image, string& whites, string& blacks) {
 
 	string full_filename = "Media/" + filename;
@@ -541,7 +537,7 @@ void Part2(string filename, Mat white_pieces_image, Mat black_pieces_image, Mat 
 	if (original_image.empty())
 		cout << "Cannot open image file: " << full_filename << endl;
 
-	Mat perspective_matrix(3, 3, CV_32FC1), perspective_warped_image, perspective_warped_part1;
+	Mat perspective_matrix(3, 3, CV_32FC1), perspective_warped_image;
 	perspective_warped_image = Mat::zeros(400, 400, original_image.type());
 
 	Point2f source_points[4], destination_points[4];
@@ -550,21 +546,18 @@ void Part2(string filename, Mat white_pieces_image, Mat black_pieces_image, Mat 
 	source_points[2] = Point2f(355.0, 20.0);
 	source_points[3] = Point2f(433.0, 241.0);
 
-	destination_points[0] = Point2f(1.0, 1.0);
-	destination_points[1] = Point2f(1.0, 399.0);
-	destination_points[2] = Point2f(399.0, 1.0);
-	destination_points[3] = Point2f(399.0, 399.0);
+	destination_points[0] = Point2f(0, 0);
+	destination_points[1] = Point2f(0, 400.0);
+	destination_points[2] = Point2f(400.0, 0);
+	destination_points[3] = Point2f(400.0, 400.0);
 
+	// perform a perspective transformation using the four board corner coordinates
 	perspective_matrix = getPerspectiveTransform(source_points, destination_points);
 	warpPerspective(original_image, perspective_warped_image, perspective_matrix, perspective_warped_image.size());
-	
-	Mat perspective_transform_output = JoinImagesHorizontally(perspective_warped_image, "", perspective_warped_part1, "");
-	//imshow("Perspective Transformation", perspective_transform_output);
 	
 	// Divide the image into 64 equally sized blocks: in other words, 64 50x50 blocks (assuming the image is 400x400)
 	// Each block corresponds to one of the squares on the board
 	// Only need to process 32 of these: the 32 squares that are black
-	
 	int block_width = perspective_warped_image.cols / 8;
 	int block_height = perspective_warped_image.rows / 8;
 
@@ -574,9 +567,7 @@ void Part2(string filename, Mat white_pieces_image, Mat black_pieces_image, Mat 
 		for (int j = 0; j < 8; j++) {
 			// for only odd-even and even-odd values (i.e. for only black squares)
 			if ((i % 2 != 0) && (j % 2 == 0) || (j % 2 != 0) && (i % 2 == 0)) {
-				//Rect current_square(block_width * i, block_height * j, block_width, block_height);
 				// don't even take the full square: use a smaller inner section where a piece is most likely to be found
-				// inspect a 25x25 section at the centre of each square
 				Rect current_square((block_width * i + 12.5), (block_height * j + 12.5), (block_width - 25), (block_height - 25));
 				result_blocks.push_back(perspective_warped_image(current_square));
 			}
@@ -586,30 +577,8 @@ void Part2(string filename, Mat white_pieces_image, Mat black_pieces_image, Mat 
 	// The 32 squares are now stored in a vector in an order consistent with Portable Draughts Notation
 	// Now go through each square one-by-one and identify whether it contains a white piece, black piece or is empty
 
-	// I AM GOING TO RESORT TO USE OF HISTOGRAM COMPARISON FOR THE TIME BEING
-	// I WILL SET A THRESHOLD FOR A PIECE TO BE COUNTED TO MITIGATE THE BOARD-GLARE ISSUE
-	// THIS WILL ENABLE ME TO MOVE ON TO LOADING ALL 69 FRAMES TO COMPLETE A PROVISIONAL DRAFT FOR PART 2
-	// WHICH MEANS I CAN MOVE ON TO PART 3
-	// IF STUDY OF EDGES GIVES AN IDEA FOR A BETTER SOLUTION, I WILL RETURN AND IMPROVE THE CURRENT ITERATION
-	// CONSIDERING PERFORMING HIST COMPARISON ON JUST A CENTRE CIRCULAR SECTION FOR EACH SQUARE, I.E. IN THE REGION WHERE PIECES ARE MOST LIKELY TO BE FOUND
-	// THIS WOULD ENABLE ME TO USE THE ORIGINAL SAMPLE IMAGES INSTEAD OF THE SAMPLES GENERATED FROM FRAME 21
-	// IF I HAVE TIME, I WILL IMPLEMENT THIS: IT SHOULD NOT TAKE LONG
-
 	// generate three histograms to compare each square against 
-	// the samples used here were created using frame 21: not an ideal approach but gives the best results at the moment
-
-	/*Mat hls_empty_square, hls_white_piece, hls_black_piece, hls_unclassified_square;
-
-	cvtColor(empty_square, hls_empty_square, COLOR_BGR2HLS);
-	ColourHistogram empty_square_histogram(hls_empty_square, 4);
-	cvtColor(white_on_square, hls_white_piece, COLOR_BGR2HLS);
-	ColourHistogram white_piece_histogram(hls_white_piece, 4);
-	cvtColor(black_on_square, hls_black_piece, COLOR_BGR2HLS);
-	ColourHistogram black_piece_histogram(hls_black_piece, 4);
-	*/
-
 	Mat hls_empty_square, hls_white_piece, hls_black_piece, hls_unclassified_square;
-
 	cvtColor(black_squares_image, hls_empty_square, COLOR_BGR2HLS);
 	ColourHistogram empty_square_histogram(hls_empty_square, 4);
 	cvtColor(white_pieces_image, hls_white_piece, COLOR_BGR2HLS);
@@ -658,17 +627,16 @@ void Part2(string filename, Mat white_pieces_image, Mat black_pieces_image, Mat 
 }
 
 // function to convert a board representation to a length-32 integer array where empty = 0, white = 1, black = 2 
-// this makes the confusion matrix calculations easier
+// this makes the confusion matrix calculations easier (though the conversion to an array is so convoluted that it was probably not a good idea)
 void board_representation_from_strings_to_array(string whites, string blacks, string (&positions)[32]) {
 	vector<string> white_positions;
 	vector<string> white_king_positions;
 	vector<string> black_positions;
 	vector<string> black_king_positions;
 
-	// i need to store the king prefixes and piece positions separately as I am using the positions as integers to index into a length-32 board array
-	// the board array makes computation of the confusion matrix trivial, therefore the awkwardness in this section makes sense (? maybe)
+	// need to store the king prefixes and piece positions separately as I am using the positions as integers to index into a length-32 board array
 
-	int whites_buffer[12]; // these are the buffers that store the string-to-integer-converted piece positions
+	int whites_buffer[12]; // buffers that store the string-to-integer-converted piece positions
 	int blacks_buffer[12]; // once the pieces are positioned in the 32-string array, I will add the king prefixes back in the correct places
 
 	for (int i = 0; i < 12; i++) {
@@ -686,7 +654,7 @@ void board_representation_from_strings_to_array(string whites, string blacks, st
 		if (prefix != "K" && !next_white.empty()) { 
 			white_positions.push_back(next_white); // if it is just a white man, simply push to the white position vector
 		}
-		else if (!next_white.empty()){ // if a king is detected, subtract the king prefix and then push to the white position vector - the king position can then be sto
+		else if (!next_white.empty()){ // if a king is detected, subtract the king prefix and then push to the white position vector
 			string white_king_position = next_white.substr(1); // record the remainder of the string that follows the K
 			white_positions.push_back(white_king_position);
 			white_king_positions.push_back(white_king_position);
@@ -710,12 +678,10 @@ void board_representation_from_strings_to_array(string whites, string blacks, st
 
 	for (int i = 0; i < white_positions.size(); i++) {
 		whites_buffer[i] = stoi(white_positions[i]) - 1;
-		//cout << setw(3) << whites_buffer[i] << " ";
 	}
-	//cout << "--------";
+
 	for (int i = 0; i < black_positions.size(); i++) {
 		blacks_buffer[i] = stoi(black_positions[i]) - 1;
-		//cout << setw(3) << blacks_buffer[i] << " ";
 	}
 
 	for (int i = 0; i < 32; i++) {
@@ -753,10 +719,6 @@ void display_matrix(ConfusionMatrix conf) {
 }
 
 // **************************** PART 3 FUNCTIONS **********************************************
-
-void generate_stills() {
-
-}
 
 void process_move(string before, string after, int& from, int& to) {
 	// check the two strings
@@ -834,13 +796,445 @@ void process_move(string before, string after, int& from, int& to) {
 	}
 }
 
+// **************************** PART 4 FUNCTIONS **********************************************
+
+// **************************** PART 5 FUNCTIONS **********************************************
+
+
+
+int Circles(Mat result_image, vector<Vec3f> circles, Scalar passed_colour = -1.0)
+{
+	int count = 0;
+	for (vector<cv::Vec3f>::const_iterator current_circle = circles.begin();
+		(current_circle != circles.end()); current_circle++)
+	{
+		Scalar colour(rand() & 0xFF, rand() & 0xFF, rand() & 0xFF);
+		circle(result_image, Point((int)((*current_circle)[0]), int((*current_circle)[1])), (int)((*current_circle)[2]),
+			(passed_colour.val[0] == -1.0) ? colour : passed_colour,
+			2);
+		count++;
+	}
+	return count; // return the number of circles detected
+}
+
+// much of this function is identical to Part2() - it is simply an extension of the Part 2 function
+// they are only kept separate for demo purposes: Part5() does all that Part 2 does and more.
+
+Mat perspective(string filename) {
+	string full_filename = "Media/" + filename;
+	Mat original_image = imread(full_filename, -1);
+
+	if (original_image.empty())
+		cout << "Cannot open image file: " << full_filename << endl;
+
+	Mat perspective_matrix(3, 3, CV_32FC1), perspective_warped_image;
+	perspective_warped_image = Mat::zeros(400, 400, original_image.type());
+
+	Point2f source_points[4], destination_points[4];
+	source_points[0] = Point2f(114.0, 17.0);
+	source_points[1] = Point2f(53.0, 245.0);
+	source_points[2] = Point2f(355.0, 20.0);
+	source_points[3] = Point2f(433.0, 241.0);
+
+	destination_points[0] = Point2f(0, 0);
+	destination_points[1] = Point2f(0, 400.0);
+	destination_points[2] = Point2f(400.0, 0);
+	destination_points[3] = Point2f(400.0, 400.0);
+
+	// perform a perspective transformation using the four board corner coordinates
+	perspective_matrix = getPerspectiveTransform(source_points, destination_points);
+	warpPerspective(original_image, perspective_warped_image, perspective_matrix, perspective_warped_image.size());
+
+	return perspective_warped_image;
+}
+
+
+void Part5(Mat perspective_warped_image, vector<Vec3f> circles, Mat white_pieces_image, Mat black_pieces_image, Mat black_squares_image, string& whites, string& blacks) {
+
+	Mat gray_warped;
+	perspective_warped_image.convertTo(perspective_warped_image, CV_8UC1);
+	circles.clear();
+
+	cvtColor(perspective_warped_image, gray_warped, COLOR_BGR2GRAY);
+	medianBlur(gray_warped, gray_warped, 5);
+
+	HoughCircles(gray_warped, circles, cv::HOUGH_GRADIENT, 1, 8, 100, 10, 15, 20);//2,20,100,20,5,30);
+	Mat hough_circles_image = perspective_warped_image.clone();
+	int circle_count = Circles(hough_circles_image, circles);
+	imshow("Hough transformation", hough_circles_image);
+
+	int square_circles[32];
+	for (int i = 0; i < 32; i++) {
+		square_circles[i] = 0;
+	}
+	
+	// for some reason when i perform the hough circle operation on individual squares, it doesnt work properly
+	// therefore my only choice is to perform it on the full image
+	// and then retrospectively work out which square each of the circles resides in retrospectively
+	// that is what i am doing below
+	for (int i = 0; i < circles.size(); i++) {
+		for (int j = 0; j < 4; j++) {
+			if (circles[i][0] >= (j*100) && circles[i][0] <= (j*100 + 50)) {
+				if (circles[i][1] >= 50 && circles[i][1] <= 100) {
+					square_circles[8*j]++;
+				}
+				else if (circles[i][1] >= 150 && circles[i][1] <= 200) {
+					square_circles[8*j+1]++;
+				}
+				else if (circles[i][1] >= 250 && circles[i][1] <= 300) {
+					square_circles[8*j+2]++;
+				}
+				else if (circles[i][1] >= 350 && circles[i][1] <= 400) {
+					square_circles[8*j+3]++;
+				}
+			}
+		}
+
+		for (int j = 0; j < 4; j++) {
+			if (circles[i][0] >= (j * 100 + 50) && circles[i][0] <= (j * 100 + 100)) {
+				if (circles[i][1] >= 0 && circles[i][1] <= 50) {
+					square_circles[8 * j + 4]++;
+				}
+				else if (circles[i][1] >= 100 && circles[i][1] <= 150) {
+					square_circles[8 * j + 5]++;
+				}
+				else if (circles[i][1] >= 200 && circles[i][1] <= 250) {
+					square_circles[8 * j + 6]++;
+				}
+				else if (circles[i][1] >= 300 && circles[i][1] <= 350) {
+					square_circles[8 * j + 7]++;
+				}
+			}
+		}
+
+	}
+	
+	//***************************************************************************************************************
+	
+	// Divide the image into 64 equally sized blocks: in other words, 64 50x50 blocks (assuming the image is 400x400)
+	// Each block corresponds to one of the squares on the board
+	// Only need to process 32 of these: the 32 squares that are black
+	int block_width = perspective_warped_image.cols / 8;
+	int block_height = perspective_warped_image.rows / 8;
+	
+	vector<Mat> colour_blocks, circle_blocks;
+	for (int i = 0; i < 8; i++) {
+		for (int j = 0; j < 8; j++) {
+			// for only odd-even and even-odd values (i.e. for only black squares)
+			if ((i % 2 != 0) && (j % 2 == 0) || (j % 2 != 0) && (i % 2 == 0)) {
+				// don't even take the full square: use a smaller inner section where a piece is most likely to be found
+				Rect inner_square((block_width * i + 12.5), (block_height * j + 12.5), (block_width - 25), (block_height - 25));
+				colour_blocks.push_back(perspective_warped_image(inner_square));
+
+				// use full square for Hough circle detection
+				Rect full_square(block_width*i, block_height*j, block_width, block_height);
+				circle_blocks.push_back(hough_circles_image(full_square));
+			}
+		}
+	}
+	// The 32 squares are now stored in a vector in an order consistent with Portable Draughts Notation
+	// Now go through each square one-by-one and identify whether it contains a white piece, black piece or is empty
+	
+	// generate three histograms to compare each square against 
+	Mat hls_empty_square, hls_white_piece, hls_black_piece, hls_unclassified_square, grayscale_man_vs_king;
+	cvtColor(black_squares_image, hls_empty_square, COLOR_BGR2HLS);
+	ColourHistogram empty_square_histogram(hls_empty_square, 4);
+	cvtColor(white_pieces_image, hls_white_piece, COLOR_BGR2HLS);
+	ColourHistogram white_piece_histogram(hls_white_piece, 4);
+	cvtColor(black_pieces_image, hls_black_piece, COLOR_BGR2HLS);
+	ColourHistogram black_piece_histogram(hls_black_piece, 4);
+
+	double empty_score = 0;
+	double white_score = 0;
+	double black_score = 0;
+
+	whites = "";
+	blacks = ""; // ensure that the position strings are empty
+	
+	for (int i = 0; i < colour_blocks.size(); i++) {
+		
+		// colour classification
+		cvtColor(colour_blocks[i], hls_unclassified_square, COLOR_BGR2HLS);
+		ColourHistogram reference_histogram(hls_unclassified_square, 4);
+		reference_histogram.NormaliseHistogram();
+		empty_score = compareHist(reference_histogram.getHistogram(), empty_square_histogram.getHistogram(), cv::HISTCMP_CORREL);
+		white_score = compareHist(reference_histogram.getHistogram(), white_piece_histogram.getHistogram(), cv::HISTCMP_CORREL);
+		black_score = compareHist(reference_histogram.getHistogram(), black_piece_histogram.getHistogram(), cv::HISTCMP_CORREL);		
+
+		// check if the square contains a king
+		bool king = false;
+		if (square_circles[i] >= 2) {
+			king = true;
+		}
+		
+		// square classification based on empty/colour and king status
+		if (abs(empty_score - white_score) > 0.2 || abs(empty_score - black_score) > 0.2 || abs(black_score - white_score) > 0.2) {
+			if (white_score > empty_score) {
+				if (white_score > black_score) {
+					if (whites == "" && king) 
+						whites = whites + "K" + to_string(i + 1);
+					else if (whites == "" && !king) 
+						whites = whites + to_string(i + 1);
+					else if (whites != "" && king) 
+						whites = whites + "," + "K" + to_string(i + 1);
+					else 
+						whites = whites + "," + to_string(i + 1);
+				}
+				else if (black_score > white_score) {
+					if (blacks == "" && king) 
+						blacks = blacks + "K" + to_string(i + 1);
+					else if (blacks == "" && !king) 
+						blacks = blacks + to_string(i + 1);
+					else if (blacks != "" && king) 
+						blacks = blacks + "," + "K" + to_string(i + 1);
+					else 
+						blacks = blacks + "," + to_string(i + 1);
+				}
+			}
+			else if (black_score > empty_score) {
+				if (blacks == "" && king) 
+					blacks = blacks + "K" + to_string(i + 1);
+				else if (blacks == "" && !king)
+					blacks = blacks + to_string(i + 1);
+				else if (blacks != "" && king)
+					blacks = blacks + "," + "K" + to_string(i + 1);
+				else 
+					blacks = blacks + "," + to_string(i + 1);
+			}
+		}
+	}
+}
+
+// extension of the function used in part 2 so that Kings are represented
+void extended_board_representation_from_strings_to_array(string whites, string blacks, string(&positions)[32]) {
+	vector<string> white_positions;
+	vector<string> black_positions;
+
+	vector<bool> white_kings;
+	vector<bool> black_kings;
+
+	// need to store the king prefixes and piece positions separately as I am using the positions as integers to index into a length-32 board array
+
+	int whites_buffer[12]; // buffers that store the string-to-integer-converted piece positions
+	int blacks_buffer[12]; // once the pieces are positioned in the 32-string array, I will add the king prefixes back in the correct places
+
+	bool white_king_status[12];
+	bool black_king_status[12];
+
+	for (int i = 0; i < 12; i++) {
+		whites_buffer[i] = -1;
+		blacks_buffer[i] = -1; // initialise the two buffers to a value that doesn't represent any of the three possible states
+	}
+
+	stringstream sw(whites);
+	stringstream sb(blacks);
+
+	while (sw.good()) {
+		string next_white;
+		getline(sw, next_white, ',');
+		string prefix = next_white.substr(0, 1);
+		if (prefix != "K" && !next_white.empty()) {
+			white_positions.push_back(next_white); // if it is just a white man, simply push to the white position vector
+			white_kings.push_back(false);
+		}
+		else if (!next_white.empty()) { // if a king is detected, subtract the king prefix and then push to the white position vector
+			string white_king_position = next_white.substr(1); // record the remainder of the string that follows the K
+			white_positions.push_back(white_king_position);
+			white_kings.push_back(true);
+		}
+
+	}
+
+	while (sb.good()) {
+		string next_black;
+		getline(sb, next_black, ',');
+		string prefix = next_black.substr(0, 1);
+		if (prefix != "K" && !next_black.empty()) {
+			black_positions.push_back(next_black);
+			black_kings.push_back(false);
+		}
+		else if (!next_black.empty()) {
+			string black_king_position = next_black.substr(1); // record the position of the king
+			black_positions.push_back(black_king_position); // and store it
+			black_kings.push_back(true);
+		}
+	}
+
+	for (int i = 0; i < white_positions.size(); i++) {
+		whites_buffer[i] = stoi(white_positions[i]) - 1;
+	}
+
+	for (int i = 0; i < black_positions.size(); i++) {
+		blacks_buffer[i] = stoi(black_positions[i]) - 1;
+	}
+
+	for (int i = 0; i < 32; i++) {
+		for (int j = 0; j < 12; j++) {
+			if (i == whites_buffer[j] && white_kings[j] == false) {
+				positions[i] = "1";
+			}
+			else if (i == whites_buffer[j] && white_kings[j] == true) {
+				positions[i] = "2";
+			}
+			else if (i == blacks_buffer[j] && black_kings[j] == false) {
+				positions[i] = "3";
+			}
+			else if (i == blacks_buffer[j] && black_kings[j] == true) {
+				positions[i] = "4";
+			}
+		}
+	}
+}
+
+struct ExtendedConfusionMatrix
+{
+	int pred_empt_truth_empt, pred_empt_truth_white_man, pred_empt_truth_white_king, pred_empt_truth_black_man, pred_empt_truth_black_king;
+	int pred_white_man_truth_empt, pred_white_man_truth_white_man, pred_white_man_truth_white_king, pred_white_man_truth_black_man, pred_white_man_truth_black_king;
+	int pred_white_king_truth_empt, pred_white_king_truth_white_man, pred_white_king_truth_white_king, pred_white_king_truth_black_man, pred_white_king_truth_black_king;
+	int pred_black_man_truth_empt, pred_black_man_truth_white_man, pred_black_man_truth_white_king, pred_black_man_truth_black_man, pred_black_man_truth_black_king;
+	int pred_black_king_truth_empt, pred_black_king_truth_white_man, pred_black_king_truth_white_king, pred_black_king_truth_black_man, pred_black_king_truth_black_king;
+};
+
+void initialise_extended_matrix(ExtendedConfusionMatrix& ext_conf) {
+	ext_conf.pred_empt_truth_empt = 0;
+	ext_conf.pred_empt_truth_white_man = 0;
+	ext_conf.pred_empt_truth_white_king = 0;
+	ext_conf.pred_empt_truth_black_man = 0;
+	ext_conf.pred_empt_truth_black_king = 0;
+
+	ext_conf.pred_white_man_truth_empt = 0;
+	ext_conf.pred_white_man_truth_white_man = 0;
+	ext_conf.pred_white_man_truth_white_king = 0;
+	ext_conf.pred_white_man_truth_black_man = 0;
+	ext_conf.pred_white_man_truth_black_king = 0;
+
+	ext_conf.pred_white_king_truth_empt = 0;
+	ext_conf.pred_white_king_truth_white_man = 0;
+	ext_conf.pred_white_king_truth_white_king = 0;
+	ext_conf.pred_white_king_truth_black_man = 0;
+	ext_conf.pred_white_king_truth_black_king = 0;
+
+	ext_conf.pred_black_man_truth_empt = 0;
+	ext_conf.pred_black_man_truth_white_man = 0;
+	ext_conf.pred_black_man_truth_white_king = 0;
+	ext_conf.pred_black_man_truth_black_man = 0;
+	ext_conf.pred_black_man_truth_black_king = 0;
+
+	ext_conf.pred_black_king_truth_empt = 0;
+	ext_conf.pred_black_king_truth_white_man = 0;
+	ext_conf.pred_black_king_truth_white_king = 0;
+	ext_conf.pred_black_king_truth_black_man = 0;
+	ext_conf.pred_black_king_truth_black_king = 0;
+}
+
+void update_extended_confusion_matrix(string prediction, string BOARD_TRUTH, ExtendedConfusionMatrix& ext_conf) {
+
+	if (prediction == "0" && BOARD_TRUTH == "0") {
+		ext_conf.pred_empt_truth_empt++;
+	}
+	else if (prediction == "0" && BOARD_TRUTH == "1") {
+		ext_conf.pred_empt_truth_white_man++;
+	}
+	else if (prediction == "0" && BOARD_TRUTH == "2") {
+		ext_conf.pred_empt_truth_white_king++;
+	}
+	else if (prediction == "0" && BOARD_TRUTH == "3") {
+		ext_conf.pred_empt_truth_black_man++;
+	}
+	else if (prediction == "0" && BOARD_TRUTH == "4") {
+		ext_conf.pred_empt_truth_black_king++;
+	}
+
+	else if (prediction == "1" && BOARD_TRUTH == "0") {
+		ext_conf.pred_white_man_truth_empt++;
+	}
+	else if (prediction == "1" && BOARD_TRUTH == "1") {
+		ext_conf.pred_white_man_truth_white_man++;
+	}
+	else if (prediction == "1" && BOARD_TRUTH == "2") {
+		ext_conf.pred_white_man_truth_white_king++;
+	}
+	else if (prediction == "1" && BOARD_TRUTH == "3") {
+		ext_conf.pred_white_man_truth_black_man++;
+	}
+	else if (prediction == "1" && BOARD_TRUTH == "4") {
+		ext_conf.pred_white_man_truth_black_king++;
+	}
+
+	else if (prediction == "2" && BOARD_TRUTH == "0") {
+		ext_conf.pred_white_king_truth_empt++;
+	}
+	else if (prediction == "2" && BOARD_TRUTH == "1") {
+		ext_conf.pred_white_king_truth_white_man++;
+	}
+	else if (prediction == "2" && BOARD_TRUTH == "2") {
+		ext_conf.pred_white_king_truth_white_king++;
+	}
+	else if (prediction == "2" && BOARD_TRUTH == "3") {
+		ext_conf.pred_white_king_truth_black_man++;
+	}
+	else if (prediction == "2" && BOARD_TRUTH == "4") {
+		ext_conf.pred_white_king_truth_black_king++;
+	}
+
+	else if (prediction == "3" && BOARD_TRUTH == "0") {
+		ext_conf.pred_black_man_truth_empt++;
+	}
+	else if (prediction == "3" && BOARD_TRUTH == "1") {
+		ext_conf.pred_black_man_truth_white_man++;
+	}
+	else if (prediction == "3" && BOARD_TRUTH == "2") {
+		ext_conf.pred_black_man_truth_white_king++;
+	}
+	else if (prediction == "3" && BOARD_TRUTH == "3") {
+		ext_conf.pred_black_man_truth_black_man++;
+	}
+	else if (prediction == "3" && BOARD_TRUTH == "4") {
+		ext_conf.pred_black_man_truth_black_king++;
+	}
+
+	else if (prediction == "4" && BOARD_TRUTH == "0") {
+		ext_conf.pred_black_king_truth_empt++;
+	}
+	else if (prediction == "4" && BOARD_TRUTH == "1") {
+		ext_conf.pred_black_king_truth_white_man++;
+	}
+	else if (prediction == "4" && BOARD_TRUTH == "2") {
+		ext_conf.pred_black_king_truth_white_king++;
+	}
+	else if (prediction == "4" && BOARD_TRUTH == "3") {
+		ext_conf.pred_black_king_truth_black_man++;
+	}
+	else if (prediction == "4" && BOARD_TRUTH == "4") {
+		ext_conf.pred_black_king_truth_black_king++;
+	}
+}
+
+void display_extended_matrix(ExtendedConfusionMatrix conf) {
+	const char space = ' ';
+	const int nameWidth = 15;
+	const int numWidth = 15;
+
+	cout << endl;
+	cout << left << setw(nameWidth) << setfill(space) << "" << left << setw(nameWidth) << setfill(space) << "" << left << setw(nameWidth) << setfill(space) << "" << left << setw(nameWidth) << setfill(space) << "Ground Truth" << left << setfill(space) << "" << endl;
+	cout << left << setw(nameWidth) << setfill(space) << "" << left << setw(nameWidth) << setfill(space) << "" << left << setw(nameWidth) << setfill(space) << "No Piece" << left << setw(nameWidth) << setfill(space) << "White Man" << left << setw(nameWidth) << setfill(space) << "White King" << left << setw(nameWidth) << setfill(space) << "Black Man" << left << setfill(space) << "Black King" << endl;
+	cout << left << setw(nameWidth) << setfill(space) << "" << left << setw(nameWidth) << setfill(space) << "No Piece" << left << setw(nameWidth) << setfill(space) << conf.pred_empt_truth_empt << left << setw(nameWidth) << setfill(space) << conf.pred_empt_truth_white_man << left << setw(nameWidth) << setfill(space) << conf.pred_empt_truth_white_king << left << setw(nameWidth) << setfill(space) << conf.pred_empt_truth_black_man << left << setw(nameWidth) << setfill(space) << conf.pred_empt_truth_black_king << endl;
+	cout << left << setw(nameWidth) << setfill(space) << "" << left << setw(nameWidth) << setfill(space) << "White Man" << left << setw(nameWidth) << setfill(space) << conf.pred_white_man_truth_empt << left << setw(nameWidth) << setfill(space) << conf.pred_white_man_truth_white_man << left << setw(nameWidth) << setfill(space) << conf.pred_white_man_truth_white_king << left << setw(nameWidth) << setfill(space) << conf.pred_white_man_truth_black_man << left << setw(nameWidth) << setfill(space) << conf.pred_white_man_truth_black_king << endl;
+	cout << left << setw(nameWidth) << setfill(space) << "Detected" << left << setw(nameWidth) << setfill(space) << "White King" << left << setw(nameWidth) << setfill(space) << conf.pred_white_king_truth_empt << left << setw(nameWidth) << setfill(space) << conf.pred_white_king_truth_white_man << left << setw(nameWidth) << setfill(space) << conf.pred_white_king_truth_white_king << left << setw(nameWidth) << setfill(space) << conf.pred_white_king_truth_black_man << left << setw(nameWidth) << setfill(space) << conf.pred_white_king_truth_black_king << endl;
+	cout << left << setw(nameWidth) << setfill(space) << "" << left << setw(nameWidth) << setfill(space) << "Black Man" << left << setw(nameWidth) << setfill(space) << conf.pred_black_man_truth_empt << left << setw(nameWidth) << setfill(space) << conf.pred_black_man_truth_white_man << left << setw(nameWidth) << setfill(space) << conf.pred_black_man_truth_white_king << left << setw(nameWidth) << setfill(space) << conf.pred_black_man_truth_black_man << left << setw(nameWidth) << setfill(space) << conf.pred_black_man_truth_black_king << endl;
+	cout << left << setw(nameWidth) << setfill(space) << "" << left << setw(nameWidth) << setfill(space) << "Black King" << left << setw(nameWidth) << setfill(space) << conf.pred_black_king_truth_empt << left << setw(nameWidth) << setfill(space) << conf.pred_black_king_truth_white_man << left << setw(nameWidth) << setfill(space) << conf.pred_black_king_truth_white_king << left << setw(nameWidth) << setfill(space) << conf.pred_black_king_truth_black_man << left << setw(nameWidth) << setfill(space) << conf.pred_black_king_truth_black_king << endl;
+	cout << endl;
+}
+
+// ********************************************************************************************
+
 void MyApplication()
 {
 	string video_filename("Media/DraughtsGame1.avi");
 	VideoCapture video;
 	video.open(video_filename);
 
-	int pieces[32];
+	//int pieces[32];
 	string black_pieces_filename("Media/DraughtsGame1BlackPieces.jpg");
 	Mat black_pieces_image = imread(black_pieces_filename, -1);
 	string white_pieces_filename("Media/DraughtsGame1WhitePieces.jpg");
@@ -850,16 +1244,12 @@ void MyApplication()
 	string white_squares_filename("Media/DraughtsGame1WhiteSquares.jpg");
 	Mat white_squares_image = imread(white_squares_filename, -1);
 
-	string white_on_square_name = "Media/white_piece_sample.jpg";
-	Mat white_on_square = imread(white_on_square_name);
-	string black_on_square_name = "Media/black_piece_sample.jpg";
-	Mat black_on_square = imread(black_on_square_name);
-	string empty_square_name = "Media/empty_square_sample.jpg";
-	Mat empty_square = imread(empty_square_name);
+	string move0_ground_truth_filename = "Media/DraughtsGame1Move0GroundTruth.png";
+	Mat move0_ground_truth_image = imread(move0_ground_truth_filename, -1);
 
 	string background_filename("Media/DraughtsGame1EmptyBoard.JPG");
 	Mat static_background_image = imread(background_filename, -1);
-	if ((!video.isOpened()) || (black_pieces_image.empty()) || (white_pieces_image.empty()) || (black_squares_image.empty()) || (white_squares_image.empty()) || (static_background_image.empty()))
+	if ((!video.isOpened()) || (black_pieces_image.empty()) || (white_pieces_image.empty()) || (black_squares_image.empty()) || (white_squares_image.empty()) || (static_background_image.empty()) || (move0_ground_truth_image.empty()))
 	{
 		// Error attempting to load something.
 		if (!video.isOpened())
@@ -874,27 +1264,65 @@ void MyApplication()
 			cout << "Cannot open image file: " << white_squares_filename << endl;
 		if (static_background_image.empty())
 			cout << "Cannot open image file: " << background_filename << endl;
+		if (move0_ground_truth_image.empty())
+			cout << "Cannot open image file: " << move0_ground_truth_filename << endl;
 	}
 	else
 	{
 		// ********************************************** PART 1 *******************************************************
+		/*
+		int image_index = 0;
 
-		int image_index = 21;
+		cout << "PART 1. " << endl << endl;
 
-		cout << setw(10) << "PART 1. " << endl << endl;
+		cout << "Image number " << image_index << " is classified into white pieces, black pieces, white squares, black squares and background." << endl << endl;
 
-		cout << "Ground Truth still image number " << image_index << " classified into white pieces, black pieces, white squares, black squares and background in image \"Part 1.\"" << endl << endl;
+		Mat output;
 
-		Part1(GROUND_TRUTH_FOR_BOARD_IMAGES[image_index][0], white_pieces_image, black_pieces_image, white_squares_image, black_squares_image);
+		Part1(GROUND_TRUTH_FOR_BOARD_IMAGES[image_index][0], white_pieces_image, black_pieces_image, white_squares_image, black_squares_image, output);
 
+		double correct_pixels = 0;
+		double total_pixels = 0;
+
+		// if the user has selected the first image, the ground truth can be used for a quantitative assessment of the solution
+		if (image_index == 0) {
+			for (int row = 0; row < output.rows; row++) {
+				for (int col = 0; col < output.cols; col++) {
+					total_pixels++;
+
+					Vec3b check_pixel = output.at<Vec3b>(row, col);
+					Vec3b ground_truth_pixel = move0_ground_truth_image.at<Vec3b>(row, col);
+
+					if (check_pixel[0] == ground_truth_pixel[0] && check_pixel[1] == ground_truth_pixel[1] && check_pixel[2] == ground_truth_pixel[2]) {
+						correct_pixels++;
+					}
+
+				}
+			}
+
+			double accuracy = (correct_pixels / total_pixels) * 100;
+
+			imshow("Pixel Classification", output);
+			imshow("Ground Truth", move0_ground_truth_image);
+			cout << "Correct Pixels: " << correct_pixels << endl;
+			cout << "Total Pixels: " << total_pixels << endl;
+			cout.precision(3);
+			cout << "Accuracy = " << accuracy << "%" << endl << endl;
+		}
+
+		else {
+			imshow("Pixel Classification", output);
+			cout << "Set the image_index variable to 0 next time to get a quantitative assessment of the solution." << endl << endl;
+		}
+		*/
 		// ********************************************** PART 2 *******************************************************
-		// 
-
+		/*
 		cout << setw(10) << "PART 2. " << endl << endl;
 
 		cout << "Processing the ground truth still images..." << endl << endl;
-		
+
 		// initialise a struct to record the confusion matrix data associated with the move predictions
+		// this should be in a function but for some reason an error was being thrown so the struct parameters are initialised here instead
 		ConfusionMatrix conf;
 		conf.pred_empt_truth_empt = 0;
 		conf.pred_empt_truth_white = 0;
@@ -906,7 +1334,7 @@ void MyApplication()
 		conf.pred_black_truth_white = 0;
 		conf.pred_black_truth_black = 0;
 
-		// convert the provided ground truth data to a two-dimensional array: this makes the computation of a confusion matrix much simpler
+		// convert the provided ground truth data to a two-dimensional array: this makes the computation of a confusion matrix simpler
 		string BOARD_TRUTH[69][32];
 		string buffer[32];
 		for (int i = 0; i < 32; i++) {
@@ -920,17 +1348,17 @@ void MyApplication()
 			}
 		}
 
-		// process each of the 67 moves one by one and compare the resulting predictions array against the correct row of the 2D ground truth array 
+		// process each of the 69 images one by one and compare the resulting predictions array against the correct row of the 2D ground truth array
 		string predictions[32];
 		string whites = "";
 		string blacks = "";
 		for (int i = 0; i < 69; i++) {
-			//DraughtsBoard current_board(GROUND_TRUTH_FOR_BOARD_IMAGES[i][0], GROUND_TRUTH_FOR_BOARD_IMAGES[i][1], GROUND_TRUTH_FOR_BOARD_IMAGES[i][2]);
 			for (int j = 0; j < 32; j++) {
 				predictions[j] = "0"; // start with empty predictions
 			}
 
 			Part2(GROUND_TRUTH_FOR_BOARD_IMAGES[i][0], white_pieces_image, black_pieces_image, black_squares_image, whites, blacks); // IMAGE PROCESSING OCCURS HERE
+
 			board_representation_from_strings_to_array(whites, blacks, predictions); // convert the prediction strings to an array for easy generation of confusion matrix
 
 			// compare the predicted value of each square against the ground truth and update the confusion matrix
@@ -967,9 +1395,9 @@ void MyApplication()
 
 		cout << "Confusion Matrix: " << endl;
 		display_matrix(conf); // display the confusion matrix
-		
+		*/
 		// ********************************************** PART 3 *******************************************************
-
+		/*
 		cout << "Part 3: Screenshot generation in process... " << endl << endl;
 
 		// Process video frame by frame
@@ -991,19 +1419,19 @@ void MyApplication()
 
 		imwrite("Media/Screenshots/Move0.png", current_frame); // store the first frame
 
-		//while (!current_frame.empty())
+		//while (!current_frame.empty()) // this was throwing an exception at the end of the video - unsure how to resolve this so using one of the last frames as a stopping point instead
 		while (frame_number < 1527) {
 			double current_time = static_cast<double>(getTickCount());
 			double duration = (current_time - last_time) / getTickFrequency() / 1000.0;
 			int delay = (time_between_frames > duration) ? ((int)(time_between_frames - duration)) : 1;
 			last_time = current_time;
-			//imshow("Draughts video", current_frame);
 			video >> current_frame;
 
 			Mat foreground_mask, thresholded_image, closed_image;
 			Mat structuring_element(3, 3, CV_8U, Scalar(1));
 			Mat foreground_image = Mat::zeros(current_frame.size(), CV_8UC3);
 
+			// apply gaussian mixture model to the video
 			gmm->apply(current_frame, foreground_mask);
 			// Clean the resultant binary (moving pixel) mask using an opening.
 			threshold(foreground_mask, thresholded_image, 150, 255, THRESH_BINARY);
@@ -1015,10 +1443,13 @@ void MyApplication()
 			morphologyEx(closed_image, cleaned_foreground_mask, MORPH_OPEN, structuring_element);
 			foreground_image.setTo(Scalar(0, 0, 0));
 			current_frame.copyTo(foreground_image, cleaned_foreground_mask);
-			// Create an average background image (just for information)
+			// Create an average background image
 			Mat mean_background_image;
 			gmm->getBackgroundImage(mean_background_image);
-			
+
+			// use the foreground image to determine when to take a screenshot
+			// use a frame number delay (15 frames) to reduce the number of duplicate screenshots taken
+			// (hopefully after 15 frames another piece has been or is currently being moved)
 			if (frame_count > 15) {
 
 				int non_zero_pixel_count = 0;
@@ -1030,12 +1461,11 @@ void MyApplication()
 					}
 				}
 
+				// if the number of non-zero pixels in the foreground image is less than the threshold, it means things are pretty stationary in the current frame
+				// probably a good time to take a screenshot
 				if (non_zero_pixel_count < 2000) {
 					screenshot_number++;
-					//cout << "Screenshot! Move " << screenshot_number << endl;
-					//cout << "Frame Number " << frame_number << endl;
-					//cout << "Non-Zero Pixel Count: " << non_zero_pixel_count << endl;
-					frame_count = 0;
+					frame_count = 0; // reset the frame count to 0, i.e. take no more screenshots for another 15 frames after this one
 
 					board_screenshot_name = board_screenshot_name + to_string(screenshot_number);
 					foreground_screenshot_name = foreground_screenshot_name + to_string(screenshot_number);
@@ -1047,7 +1477,7 @@ void MyApplication()
 					foreground_screenshot_name = "Fore";
 				}
 			}
-			
+
 			frame_number++;
 			frame_count++;
 
@@ -1056,10 +1486,10 @@ void MyApplication()
 			imshow("Gaussian Mixture Model", gaussian_output);
 
 			char c = cv::waitKey(1);  // If you replace delay with 1 it will play the video as quickly as possible.
-			
+
 		}
 
-		// now armed with a collection of still images taken of the draughts board 
+		// now armed with a collection of still images taken of the draughts board
 		// process these in the same manner as the ground truth stills
 		// eliminate any duplicates
 		// then process the moves
@@ -1068,7 +1498,7 @@ void MyApplication()
 
 		string prefix = "Screenshots/Move";
 		string previous, current;
-		//vector<Mat> still_images; // store the screenshot data in a vector of matrices
+
 		vector<string> white_pieces, black_pieces;
 		Mat image;
 
@@ -1085,26 +1515,26 @@ void MyApplication()
 			previous = prefix + to_string(i) + ".png";
 			current = prefix + to_string(i + 1) + ".png";
 
-			Part2(previous, white_on_square, black_on_square, empty_square, whites1, blacks1);
-			Part2(current, white_on_square, black_on_square, empty_square, whites2, blacks2);
+			Part2(previous, white_pieces_image, black_pieces_image, black_squares_image, whites1, blacks1); // get the current and previous piece positions on the board
+			Part2(current, white_pieces_image, black_pieces_image, black_squares_image, whites2, blacks2); // these can then be fed to the move processing subroutine
 
 			if (whites1 != whites2 || blacks1 != blacks2) { // if one of the sides has made a move (i.e. no duplicate detected)
 				white_pieces.push_back(whites1);
 				black_pieces.push_back(blacks1);
 				Mat still_to_save = imread("Media/" + previous); // read in the image i want to save
-				imwrite(saved_still + to_string(count) + ".png", still_to_save); // write it to the new folder location 
+				imwrite(saved_still + to_string(count) + ".png", still_to_save); // write it to the new folder location
 				count++;
 			}
 
 			prefix = "Screenshots/Move";
 		}
 
-		int moves[72][2];
-		int white_moves[72][2], black_moves[72][2];
+		int moves[68][2];
+		//int white_moves[72][2], black_moves[72][2];
 
 		cout << setw(20) <<"Part 3, Move Detection: " << endl << endl;
 
-		cout << "Move" << setw(10) << "Detected" << setw(10) << "Ground Truth" << endl;
+		cout << "Move" << setw(10) << " " << "G. T." << setw(12) << " " << "Detected" << endl;
 
 		int turn = 1;
 
@@ -1112,12 +1542,12 @@ void MyApplication()
 			// use the "turn" variable as a boolean indicator of which side's turn it is
 			if (turn > 0) {
 				turn = turn * -1;
-				process_move(white_pieces[i - 1], white_pieces[i], moves[i][0], moves[i][1]); 
+				process_move(white_pieces[i - 1], white_pieces[i], moves[i][0], moves[i][1]);
 				if (moves[i][0] == 0 || moves[i][1] == 0) { // if no move has occurred, this means we are checking the wrong side
 					process_move(black_pieces[i - 1], black_pieces[i], moves[i][0], moves[i][1]);
 					turn = turn * -1;
 				}
-					
+
 			}
 			else {
 				turn = turn * -1;
@@ -1127,33 +1557,89 @@ void MyApplication()
 					turn = turn * -1;
 				}
 			}
-			if (moves[i][0] == -1 || moves[i][1] == -1)
-				cout << i << setw(3) << ". " << setw(17) << "x-x" << GROUND_TRUTH_FOR_DRAUGHTSGAME1_VIDEO_MOVES[i - 1][1] << "-" << GROUND_TRUTH_FOR_DRAUGHTSGAME1_VIDEO_MOVES[i - 1][2] << endl;
-			else if (moves[i][0] == 0 || moves[i][1] == 0)
-				cout << i << setw(3) << ". " << setw(17) << "o-o" << GROUND_TRUTH_FOR_DRAUGHTSGAME1_VIDEO_MOVES[i - 1][1] << "-" << GROUND_TRUTH_FOR_DRAUGHTSGAME1_VIDEO_MOVES[i - 1][2] << endl;
+		}
+
+		for (int i = 1; i < 69; i++) {
+			string out = "";
+			if (moves[i][0] > -2 && moves[i][1] > -2) {
+				out = to_string(moves[i][0]) + "-" + to_string(moves[i][1]);
+			}
 			else
-				cout << i << setw(3) << ". " << setw(2) << moves[i][0] << "-" << setw(2) << moves[i][1] << setw(12) << " " << GROUND_TRUTH_FOR_DRAUGHTSGAME1_VIDEO_MOVES[i - 1][1] << "-" << GROUND_TRUTH_FOR_DRAUGHTSGAME1_VIDEO_MOVES[i - 1][2] << endl;
+				out = "N/A";
+			string ground_t = to_string(GROUND_TRUTH_FOR_DRAUGHTSGAME1_VIDEO_MOVES[i - 1][1]) + "-" + to_string(GROUND_TRUTH_FOR_DRAUGHTSGAME1_VIDEO_MOVES[i - 1][2]);
+
+			if (i == 35) {
+				cout << endl << endl;
+			}
+
+			if (moves[i][0] == -1 || moves[i][1] == -1)
+				cout << setw(2) << i << setw(12) << " " << GROUND_TRUTH_FOR_DRAUGHTSGAME1_VIDEO_MOVES[i - 1][1] << "-" << GROUND_TRUTH_FOR_DRAUGHTSGAME1_VIDEO_MOVES[i - 1][2] << setw(12) << " " << "x-x" << endl;
+			else if (moves[i][0] == 0 || moves[i][1] == 0)
+				cout << setw(2) << i << setw(12) << " " << GROUND_TRUTH_FOR_DRAUGHTSGAME1_VIDEO_MOVES[i - 1][1] << " - " << GROUND_TRUTH_FOR_DRAUGHTSGAME1_VIDEO_MOVES[i - 1][2] << setw(12) << " " << "o-o" << endl;
+			else
+				cout << setw(2) << i << setw(12) << " " << setw(5) << ground_t << setw(12) << " " << out << endl;
 		}
 
 		cout << "\nKey: " << endl;
-		cout << setw(10) << "x-x = Mismatched number of pieces before and after, i.e. an invalid move was detected." << endl;
-		cout << setw(10) << "o-o = Pieces are identical before and after, i.e. no move was detected." << endl << endl;
+		cout << "x-x = Mismatched number of pieces before and after, i.e. an invalid move was detected." << endl;
+		cout << "o-o = Pieces are identical before and after, i.e. no move was detected." << endl << endl;
 
-		cout << "Note: Move 40 is missed by the video processing algorithm and thus one move less than the ground truth is detected." << endl;
-		cout << "As a result, each output Detected[i] after Move 39 corresponds to GroundTruth[i+1]" << endl;
-
+		cout << "Note: Move 38 is missed by the video processing algorithm and thus one move less than the ground truth is detected." << endl;
+		cout << "As a result, each output Detected[i] after Move 38 corresponds to GroundTruth[i+1]" << endl;
+		*/
 		// ********************************************** PART 4 *******************************************************
-
-
 
 		// ********************************************** PART 5 *******************************************************
 
+		ExtendedConfusionMatrix ext_conf;
+		initialise_extended_matrix(ext_conf);
 
+		string BOARD_TRUTH[69][32];
+		string buffer[32];
+		string predictions[32];
+		string white_team = "";
+		string black_team = "";
+
+		for (int i = 0; i < 32; i++) {
+			buffer[i] = "0"; // start with an empty buffer
+		}
+		for (int i = 0; i < 69; i++) {
+			extended_board_representation_from_strings_to_array(GROUND_TRUTH_FOR_BOARD_IMAGES[i][1], GROUND_TRUTH_FOR_BOARD_IMAGES[i][2], buffer);
+			for (int j = 0; j < 32; j++) {
+				BOARD_TRUTH[i][j] = buffer[j];
+				buffer[j] = "0"; // reset the buffer to all 0s for the next iteration
+			}
+		}
+
+
+		// &&&&&&&&&&&&&&&&&&&&&&&&&&& WORK OUT HOW TO LOOP THIS FOR 69 FRAMES WITHOUT AN ASSERTION ERROR AND PART 5 IS COMPLETE
+		
+		for (int i = 0; i < 1; i++) {
+
+			for (int j = 0; j < 32; j++) {
+				predictions[j] = "0"; // start with empty predictions
+			}
+
+			Mat perspective_transformed_img = perspective(GROUND_TRUTH_FOR_BOARD_IMAGES[i][0]);
+			vector<Vec3f> circles;
+
+			Part5(perspective_transformed_img, circles, white_pieces_image, black_pieces_image, black_squares_image, white_team, black_team); // IMAGE PROCESSING OCCURS HERE
+
+			extended_board_representation_from_strings_to_array(white_team, black_team, predictions); // convert the prediction strings to an array for easy generation of confusion matrix
+
+			// compare the predicted value of each square against the ground truth and update the confusion matrix
+			for (int j = 0; j < 32; j++) {
+				update_extended_confusion_matrix(predictions[j], BOARD_TRUTH[i][j], ext_conf);
+			}
+
+		}
+		// &&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&
+
+		display_extended_matrix(ext_conf);
 
 		// *********************************************** ~~~ *********************************************************
 
-		cv::destroyAllWindows();
+		//cv::destroyAllWindows();
 		
 	}
 }
- 
