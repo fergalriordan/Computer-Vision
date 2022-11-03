@@ -800,8 +800,6 @@ void process_move(string before, string after, int& from, int& to) {
 
 // **************************** PART 5 FUNCTIONS **********************************************
 
-
-
 int Circles(Mat result_image, vector<Vec3f> circles, Scalar passed_colour = -1.0)
 {
 	int count = 0;
@@ -848,8 +846,7 @@ Mat perspective(string filename) {
 	return perspective_warped_image;
 }
 
-
-void Part5(Mat perspective_warped_image, vector<Vec3f> circles, Mat white_pieces_image, Mat black_pieces_image, Mat black_squares_image, string& whites, string& blacks) {
+void Part5(Mat perspective_warped_image, vector<Vec3f> &circles, Mat white_pieces_image, Mat black_pieces_image, Mat black_squares_image, string& whites, string& blacks) {
 
 	Mat gray_warped;
 	perspective_warped_image.convertTo(perspective_warped_image, CV_8UC1);
@@ -858,7 +855,7 @@ void Part5(Mat perspective_warped_image, vector<Vec3f> circles, Mat white_pieces
 	cvtColor(perspective_warped_image, gray_warped, COLOR_BGR2GRAY);
 	medianBlur(gray_warped, gray_warped, 5);
 
-	HoughCircles(gray_warped, circles, cv::HOUGH_GRADIENT, 1, 8, 100, 10, 15, 20);//2,20,100,20,5,30);
+	HoughCircles(gray_warped, circles, cv::HOUGH_GRADIENT, 1, 8, 100, 10, 15, 20);
 	Mat hough_circles_image = perspective_warped_image.clone();
 	int circle_count = Circles(hough_circles_image, circles);
 	imshow("Hough transformation", hough_circles_image);
@@ -1588,7 +1585,56 @@ void MyApplication()
 		cout << "As a result, each output Detected[i] after Move 38 corresponds to GroundTruth[i+1]" << endl;
 		*/
 		// ********************************************** PART 4 *******************************************************
+		/*
+		int p4_index = 22;
 
+		string full_filename = "Media/" + GROUND_TRUTH_FOR_BOARD_IMAGES[p4_index][0];
+		Mat p4_image = imread(full_filename, -1);
+
+		if (p4_image.empty())
+			cout << "Cannot open image file: " << full_filename << endl;
+
+		Mat canny_edge_image;
+		Canny(p4_image, canny_edge_image, 80, 150);
+
+		// Hough transform for lines spanning the complete image
+		vector<Vec2f> hough_lines;
+		HoughLines(canny_edge_image, hough_lines, 1, PI / 200.0, 100);
+		//Mat hough_lines_image = p4_image.clone();
+		Mat hough_lines_image = Mat::zeros(canny_edge_image.size(), CV_8UC3);
+		DrawLines(hough_lines_image, hough_lines);
+		Mat p4_output1 = JoinImagesHorizontally(p4_image, "Original Image", hough_lines_image, "Hough for Lines", 4);
+
+		imshow("Hough Lines", p4_output1);
+
+		// Probabilistic Hough transform for line segments
+		vector<Vec4i> hough_line_segments;
+		HoughLinesP(canny_edge_image, hough_line_segments, 1.0, PI / 200.0, 20, 20, 5);
+		Mat hough_line_segments_image = Mat::zeros(canny_edge_image.size(), CV_8UC3);
+		DrawLines(hough_line_segments_image, hough_line_segments);
+		Mat p4_output2 = JoinImagesHorizontally(p4_image, "", hough_line_segments_image, "Probabilistic Hough (for line segments)", 4);
+
+		imshow("Hough Line Segments", p4_output2);
+
+		//findChessboardCorners
+		Size patternsize(7, 7); //interior number of corners
+		Mat grayscale_board;
+		cvtColor(p4_image, grayscale_board, COLOR_BGR2GRAY);
+		vector<Point2f> corners; //this will be filled by the detected corners
+		//CALIB_CB_FAST_CHECK saves a lot of time on images
+		//that do not contain any chessboard corners
+		bool patternfound = findChessboardCorners(grayscale_board, patternsize, corners,
+			CALIB_CB_ADAPTIVE_THRESH + CALIB_CB_NORMALIZE_IMAGE);
+
+		if (patternfound)
+			cout << "Pattern found!" << endl;
+		//cornerSubPix(grayscale_board, corners, Size(11, 11), Size(-1, -1), TermCriteria(EPS + ITER, 30, 0.1));
+		else
+			cout << "Pattern not found." << endl;
+		//drawChessboardCorners(p4_image, patternsize, Mat(corners), patternfound);
+
+		//imshow("Corners", p4_image);
+		*/
 		// ********************************************** PART 5 *******************************************************
 
 		ExtendedConfusionMatrix ext_conf;
@@ -1613,17 +1659,21 @@ void MyApplication()
 
 
 		// &&&&&&&&&&&&&&&&&&&&&&&&&&& WORK OUT HOW TO LOOP THIS FOR 69 FRAMES WITHOUT AN ASSERTION ERROR AND PART 5 IS COMPLETE
-		
-		for (int i = 0; i < 1; i++) {
+		vector<Vec3f> circles;
+		for (int i = 0; i < 69; i++) {
 
 			for (int j = 0; j < 32; j++) {
 				predictions[j] = "0"; // start with empty predictions
 			}
 
 			Mat perspective_transformed_img = perspective(GROUND_TRUTH_FOR_BOARD_IMAGES[i][0]);
-			vector<Vec3f> circles;
+			//vector<Vec3f> circles;
+
+			circles.clear();
 
 			Part5(perspective_transformed_img, circles, white_pieces_image, black_pieces_image, black_squares_image, white_team, black_team); // IMAGE PROCESSING OCCURS HERE
+
+			circles.clear();
 
 			extended_board_representation_from_strings_to_array(white_team, black_team, predictions); // convert the prediction strings to an array for easy generation of confusion matrix
 
@@ -1633,6 +1683,7 @@ void MyApplication()
 			}
 
 		}
+
 		// &&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&
 
 		display_extended_matrix(ext_conf);
@@ -1643,3 +1694,4 @@ void MyApplication()
 		
 	}
 }
+ 
